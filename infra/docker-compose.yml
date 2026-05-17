@@ -1,0 +1,301 @@
+version: "3.8"
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  pg_data:
+  redis_data:
+  chroma_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+
+# ---------------------------------------------------------------------------
+# Shared environment anchors
+# ---------------------------------------------------------------------------
+x-postgres-env: &postgres-env
+  POSTGRES_DB: whatsapp_saas
+  POSTGRES_USER: app_user
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+x-app-postgres-url: &app-postgres-url
+  POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+
+x-redis-url: &redis-url
+  REDIS_URL: redis://flow_engine_user:${REDIS_FLOW_ENGINE_PASSWORD}@redis:6379/0
+
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL 16
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      <<: *postgres-env
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d whatsapp_saas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # -------------------------------------------------------------------------
+  # Redis 7 with AOF persistence and ACL file
+  # The entrypoint renders users.acl.tpl → users.acl via envsubst so that
+  # shell variables (${REDIS_*_PASSWORD}) are expanded before Redis reads
+  # the ACL file. Redis 7 does NOT expand env vars in ACL files natively.
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    environment:
+      REDIS_GATEWAY_PASSWORD: ${REDIS_GATEWAY_PASSWORD}
+      REDIS_FLOW_ENGINE_PASSWORD: ${REDIS_FLOW_ENGINE_PASSWORD}
+      REDIS_TENANT_API_PASSWORD: ${REDIS_TENANT_API_PASSWORD}
+      REDIS_RAG_INDEXER_PASSWORD: ${REDIS_RAG_INDEXER_PASSWORD}
+      REDIS_DEFAULT_PASSWORD: ${REDIS_DEFAULT_PASSWORD}
+    entrypoint: >
+      /bin/sh -c "
+        apk add --no-cache gettext > /dev/null 2>&1;
+        envsubst < /usr/local/etc/redis/users.acl.tpl > /usr/local/etc/redis/users.acl;
+        exec redis-server /usr/local/etc/redis/redis.conf
+      "
+    volumes:
+      - redis_data:/data
+      - ./redis:/usr/local/etc/redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_DEFAULT_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # -------------------------------------------------------------------------
+  # ChromaDB 0.5
+  # -------------------------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_SERVER_AUTHN_CREDENTIALS:-}
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # -------------------------------------------------------------------------
+  # MinIO (S3-compatible object storage)
+  # -------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # -------------------------------------------------------------------------
+  # MinIO bucket initializer (one-shot; exits after bucket creation)
+  # -------------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET_KB: ${S3_BUCKET_KB:-kb-documents}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+        mc mb --ignore-existing local/$$S3_BUCKET_KB;
+        echo 'Bucket $$S3_BUCKET_KB ready.';
+      "
+
+  # -------------------------------------------------------------------------
+  # Caddy reverse proxy
+  # -------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - gateway
+      - tenant-api
+
+  # -------------------------------------------------------------------------
+  # gateway — webhook receiver
+  # -------------------------------------------------------------------------
+  gateway:
+    build:
+      context: ../services/gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN}
+      REDIS_URL: redis://gateway_user:${REDIS_GATEWAY_PASSWORD}@redis:6379/0
+      POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      TENANT_CACHE_TTL_SECONDS: ${TENANT_CACHE_TTL_SECONDS:-300}
+      STREAM_MAXLEN_APPROX: ${STREAM_MAXLEN_APPROX:-10000}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # tenant-api — back-office REST API
+  # -------------------------------------------------------------------------
+  tenant-api:
+    build:
+      context: ../services/tenant-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      REDIS_URL: redis://tenant_api_user:${REDIS_TENANT_API_PASSWORD}@redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      MASTER_KEY: ${MASTER_KEY}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET_KB: ${S3_BUCKET_KB:-kb-documents}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      FLOW_ENGINE_ADMIN_URL: http://flow-engine:8001
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      ARGON2_MEMORY_COST_KB: ${ARGON2_MEMORY_COST_KB:-65536}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # flow-engine — conversational orchestrator (2 replicas)
+  # -------------------------------------------------------------------------
+  flow-engine:
+    build:
+      context: ../services/flow-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # No host port binding: with deploy.replicas: 2 both instances would fight
+    # for port 8001 on the host. Internal services reach flow-engine:8001 via
+    # Docker's internal DNS which load-balances across replicas. Caddy handles
+    # any external routing that is needed.
+    environment:
+      MODE: ${FLOW_ENGINE_MODE:-both}
+      ADMIN_PORT: 8001
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      REDIS_URL: redis://flow_engine_user:${REDIS_FLOW_ENGINE_PASSWORD}@redis:6379/0
+      POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      META_API_BASE: ${META_API_BASE:-https://graph.facebook.com/v21.0}
+      META_APP_SECRET: ${META_APP_SECRET}
+      MASTER_KEY: ${MASTER_KEY}
+      EMBEDDER_DEFAULT: ${EMBEDDER_DEFAULT:-sbert}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-500}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
+      RAG_DEFAULT_CONFIDENCE: ${RAG_DEFAULT_CONFIDENCE:-0.55}
+      WORKER_COUNT: ${FLOW_ENGINE_WORKER_COUNT:-4}
+      STREAM_BLOCK_MS: ${STREAM_BLOCK_MS:-5000}
+      LOCK_TTL_SECONDS: ${LOCK_TTL_SECONDS:-30}
+      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-300}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      FLOW_CACHE_TTL_SECONDS: ${FLOW_CACHE_TTL_SECONDS:-60}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  # -------------------------------------------------------------------------
+  # rag-indexer — document ingestion worker
+  # -------------------------------------------------------------------------
+  rag-indexer:
+    build:
+      context: ../services/rag-indexer
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      REDIS_URL: redis://rag_indexer_user:${REDIS_RAG_INDEXER_PASSWORD}@redis:6379/0
+      POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET_KB: ${S3_BUCKET_KB:-kb-documents}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      EMBEDDER_DEFAULT: ${EMBEDDER_DEFAULT:-sbert}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CHUNK_SIZE_TOKENS: ${CHUNK_SIZE_TOKENS:-512}
+      CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-50}
+      EMBED_BATCH_SIZE: ${EMBED_BATCH_SIZE:-32}
+      HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_COUNT: ${RAG_INDEXER_WORKER_COUNT:-2}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy

@@ -1,0 +1,7 @@
+localhost {
+  # WhatsApp webhook — routed to gateway
+  reverse_proxy /webhook* gateway:3000
+
+  # Tenant REST API — all other /api routes
+  reverse_proxy /api* tenant-api:3001
+}
