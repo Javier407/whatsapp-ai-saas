@@ -1,0 +1,216 @@
+// Prisma schema — mirrors infra/migrations/ SQL exactly.
+// Two DATABASE_URL vars:
+//   DATABASE_URL         — app_user (no BYPASSRLS, used at runtime)
+//   DATABASE_MIGRATION_URL — migrator role (BYPASSRLS, used for prisma migrate)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DATABASE_MIGRATION_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Plan {
+  free
+  pro
+  enterprise
+}
+
+enum TenantStatus {
+  active
+  suspended
+  offboarded
+}
+
+enum UserRole {
+  owner
+  admin
+  viewer
+}
+
+enum NodeType {
+  message
+  interactive
+  collect_input
+  condition
+  rag_lookup
+  llm_generate
+  api_call
+  end
+}
+
+enum SourceType {
+  text
+  pdf
+  faq_json
+  markdown
+}
+
+enum DocumentStatus {
+  pending
+  indexing
+  indexed
+  failed
+}
+
+enum Direction {
+  inbound
+  outbound
+}
+
+// ---------------------------------------------------------------------------
+// Tenant
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String       @unique
+  wabaId        String?      @map("waba_id")
+  phoneNumberId String?      @unique @map("phone_number_id")
+  accessToken   String?      @map("access_token") // encrypted ciphertext (AES-256-GCM)
+  plan          Plan         @default(free)
+  status        TenantStatus @default(active)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  users                  User[]
+  flows                  Flow[]
+  flowNodes              FlowNode[]
+  knowledgeBaseDocuments KnowledgeBaseDocument[]
+  conversationLogs       ConversationLog[]
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------------------------
+// User
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(admin)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId], map: "idx_users_tenant")
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Flow
+// ---------------------------------------------------------------------------
+
+model Flow {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  description String?
+  trigger     Json
+  entryNode   String   @map("entry_node")
+  isActive    Boolean  @default(false) @map("is_active")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nodes            FlowNode[]
+  conversationLogs ConversationLog[]
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId], map: "idx_flows_tenant_active")
+  @@map("flows")
+}
+
+// ---------------------------------------------------------------------------
+// FlowNode
+// ---------------------------------------------------------------------------
+
+model FlowNode {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flowId      String   @map("flow_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  nodeKey     String   @map("node_key")
+  type        NodeType
+  config      Json
+  transitions Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  flow   Flow   @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([flowId, nodeKey])
+  @@index([flowId], map: "idx_flow_nodes_flow")
+  @@map("flow_nodes")
+}
+
+// ---------------------------------------------------------------------------
+// KnowledgeBaseDocument
+// ---------------------------------------------------------------------------
+
+model KnowledgeBaseDocument {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  name         String
+  sourceType   SourceType     @map("source_type")
+  storageUri   String         @map("storage_uri")
+  status       DocumentStatus @default(pending)
+  chunkCount   Int?           @map("chunk_count")
+  errorMessage String?        @map("error_message")
+  uploadedAt   DateTime       @default(now()) @map("uploaded_at") @db.Timestamptz
+  indexedAt    DateTime?      @map("indexed_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status], map: "idx_kb_docs_tenant_status")
+  @@map("knowledge_base_documents")
+}
+
+// ---------------------------------------------------------------------------
+// ConversationLog
+// ---------------------------------------------------------------------------
+
+model ConversationLog {
+  id          BigInt    @id @default(autoincrement())
+  tenantId    String    @map("tenant_id") @db.Uuid
+  waId        String    @map("wa_id")
+  direction   Direction
+  messageType String    @map("message_type")
+  content     Json
+  flowId      String?   @map("flow_id") @db.Uuid
+  nodeKey     String?   @map("node_key")
+  llmTokens   Int?      @map("llm_tokens")
+  latencyMs   Int?      @map("latency_ms")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  flow   Flow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, waId, createdAt(sort: Desc)], map: "idx_conv_logs_tenant_wa_time")
+  @@index([tenantId, createdAt(sort: Desc)], map: "idx_conv_logs_tenant_time")
+  @@map("conversation_logs")
+}
+
+// ---------------------------------------------------------------------------
+// WorkerHeartbeat
+// ---------------------------------------------------------------------------
+
+model WorkerHeartbeat {
+  workerName String    @id @map("worker_name")
+  lastSeenAt DateTime  @map("last_seen_at") @db.Timestamptz
+  metadata   Json?
+
+  @@map("worker_heartbeats")
+}

@@ -1,0 +1,65 @@
+import argon2 from 'argon2';
+import type { ITenantRepo } from '../../domain/ports/ITenantRepo.js';
+import type { IUserRepo } from '../../domain/ports/IUserRepo.js';
+import { ConflictError, ValidationError } from '../../domain/errors.js';
+
+export interface RegisterInput {
+  tenantName: string;
+  email: string;
+  password: string;
+}
+
+export interface RegisterOutput {
+  tenantId: string;
+  userId: string;
+}
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 63);
+}
+
+export class RegisterUseCase {
+  constructor(
+    private readonly tenantRepo: ITenantRepo,
+    private readonly userRepo: IUserRepo,
+  ) {}
+
+  async execute(input: RegisterInput): Promise<RegisterOutput> {
+    if (!input.email.includes('@')) {
+      throw new ValidationError('Invalid email address');
+    }
+    if (input.password.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters');
+    }
+    if (!input.tenantName.trim()) {
+      throw new ValidationError('Tenant name is required');
+    }
+
+    const slug = generateSlug(input.tenantName);
+    const existingTenant = await this.tenantRepo.findBySlug(slug);
+    if (existingTenant) {
+      throw new ConflictError(`Tenant slug '${slug}' is already taken`);
+    }
+
+    const passwordHash = await argon2.hash(input.password, {
+      type: argon2.argon2id,
+      memoryCost: 65536,
+      timeCost: 3,
+      parallelism: 1,
+    });
+
+    const tenant = await this.tenantRepo.create({ name: input.tenantName, slug });
+    const user = await this.userRepo.create({
+      tenantId: tenant.id,
+      email: input.email,
+      passwordHash,
+      role: 'owner',
+    });
+
+    return { tenantId: tenant.id, userId: user.id };
+  }
+}

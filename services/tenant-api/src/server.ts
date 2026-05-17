@@ -1,0 +1,202 @@
+import Fastify from 'fastify';
+import fastifySensible from '@fastify/sensible';
+import fastifyMultipart from '@fastify/multipart';
+import fp from 'fastify-plugin';
+import Redis from 'ioredis';
+import { loadConfig } from './config.js';
+import { getPrismaClient } from './infrastructure/prisma/PrismaClient.js';
+import { PrismaTenantRepo } from './infrastructure/prisma/PrismaTenantRepo.js';
+import { PrismaUserRepo } from './infrastructure/prisma/PrismaUserRepo.js';
+import { PrismaFlowRepo } from './infrastructure/prisma/PrismaFlowRepo.js';
+import { PrismaKbDocumentRepo } from './infrastructure/prisma/PrismaKbDocumentRepo.js';
+import { PrismaConvLogRepo } from './infrastructure/prisma/PrismaConvLogRepo.js';
+import { MinioStorageAdapter } from './infrastructure/storage/MinioStorageAdapter.js';
+import { RedisIndexingQueue } from './infrastructure/redis/RedisIndexingQueue.js';
+import { FlowEngineHttpClient } from './infrastructure/flowengine/FlowEngineHttpClient.js';
+import { RegisterUseCase } from './application/auth/RegisterUseCase.js';
+import { LoginUseCase } from './application/auth/LoginUseCase.js';
+import { GetTenantUseCase } from './application/tenant/GetTenantUseCase.js';
+import { UpdateTenantUseCase } from './application/tenant/UpdateTenantUseCase.js';
+import { ConnectWhatsAppUseCase } from './application/tenant/ConnectWhatsAppUseCase.js';
+import { CreateFlowUseCase } from './application/flows/CreateFlowUseCase.js';
+import { UpdateFlowUseCase } from './application/flows/UpdateFlowUseCase.js';
+import { ActivateFlowUseCase } from './application/flows/ActivateFlowUseCase.js';
+import { DeleteFlowUseCase } from './application/flows/DeleteFlowUseCase.js';
+import { GetFlowUseCase, ListFlowsUseCase } from './application/flows/GetFlowUseCase.js';
+import { UploadDocumentUseCase } from './application/kb/UploadDocumentUseCase.js';
+import { ListDocumentsUseCase } from './application/kb/ListDocumentsUseCase.js';
+import { DeleteDocumentUseCase } from './application/kb/DeleteDocumentUseCase.js';
+import { ListConversationsUseCase } from './application/conversations/ListConversationsUseCase.js';
+import { DryRunUseCase } from './application/dryrun/DryRunUseCase.js';
+import { authPlugin } from './interfaces/http/plugins/authPlugin.js';
+import { rlsPlugin } from './interfaces/http/plugins/rlsPlugin.js';
+import { authRoutes } from './interfaces/http/routes/auth.routes.js';
+import { tenantRoutes } from './interfaces/http/routes/tenant.routes.js';
+import { flowsRoutes } from './interfaces/http/routes/flows.routes.js';
+import { kbRoutes } from './interfaces/http/routes/kb.routes.js';
+import { conversationsRoutes } from './interfaces/http/routes/conversations.routes.js';
+import { dryrunRoutes } from './interfaces/http/routes/dryrun.routes.js';
+import type { FastifyInstance } from 'fastify';
+
+export async function buildApp(): Promise<FastifyInstance> {
+  const config = loadConfig();
+
+  const app = Fastify({
+    logger: {
+      level: config.LOG_LEVEL,
+      ...(config.NODE_ENV === 'development' && {
+        transport: { target: 'pino-pretty', options: { colorize: true } },
+      }),
+    },
+  });
+
+  await app.register(fastifySensible);
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: config.KB_MAX_FILE_SIZE_MB * 1024 * 1024 },
+  });
+
+  // Auth plugin (registers JWT)
+  await app.register(authPlugin, { config });
+
+  // RLS plugin (sets AsyncLocalStorage per request)
+  await app.register(rlsPlugin);
+
+  // ---------------------------------------------------------------------------
+  // Infrastructure adapters
+  // ---------------------------------------------------------------------------
+  const prisma = getPrismaClient();
+  const redis = new Redis(config.REDIS_URL, { lazyConnect: false });
+
+  const tenantRepo = new PrismaTenantRepo(prisma);
+  const userRepo = new PrismaUserRepo(prisma);
+  const flowRepo = new PrismaFlowRepo(prisma);
+  const kbRepo = new PrismaKbDocumentRepo(prisma);
+  const convLogRepo = new PrismaConvLogRepo(prisma);
+
+  const storage = new MinioStorageAdapter({
+    endPoint: config.S3_ENDPOINT,
+    port: config.S3_PORT,
+    useSSL: config.S3_USE_SSL,
+    accessKey: config.S3_ACCESS_KEY,
+    secretKey: config.S3_SECRET_KEY,
+    bucket: config.S3_BUCKET_KB,
+  });
+
+  const queue = new RedisIndexingQueue(redis);
+
+  const flowEngineClient = new FlowEngineHttpClient(
+    config.FLOW_ENGINE_ADMIN_URL,
+    config.INTERNAL_API_TOKEN,
+    config.DRY_RUN_TIMEOUT_MS,
+  );
+
+  // ---------------------------------------------------------------------------
+  // Use cases
+  // ---------------------------------------------------------------------------
+  const registerUseCase = new RegisterUseCase(tenantRepo, userRepo);
+  const loginUseCase = new LoginUseCase(tenantRepo, userRepo);
+  const getTenantUseCase = new GetTenantUseCase(tenantRepo);
+  const updateTenantUseCase = new UpdateTenantUseCase(tenantRepo);
+  const connectWhatsAppUseCase = new ConnectWhatsAppUseCase(tenantRepo, config.MASTER_KEY);
+  const createFlowUseCase = new CreateFlowUseCase(flowRepo, flowEngineClient);
+  const updateFlowUseCase = new UpdateFlowUseCase(flowRepo, flowEngineClient);
+  const activateFlowUseCase = new ActivateFlowUseCase(flowRepo, flowEngineClient);
+  const deleteFlowUseCase = new DeleteFlowUseCase(flowRepo, flowEngineClient);
+  const getFlowUseCase = new GetFlowUseCase(flowRepo);
+  const listFlowsUseCase = new ListFlowsUseCase(flowRepo);
+  const uploadDocumentUseCase = new UploadDocumentUseCase(
+    kbRepo,
+    storage,
+    queue,
+    config.KB_MAX_FILE_SIZE_MB,
+    config.KB_MAX_DOCUMENTS_PER_TENANT,
+  );
+  const listDocumentsUseCase = new ListDocumentsUseCase(kbRepo);
+  const deleteDocumentUseCase = new DeleteDocumentUseCase(kbRepo, storage);
+  const listConversationsUseCase = new ListConversationsUseCase(convLogRepo);
+  const dryRunUseCase = new DryRunUseCase(flowEngineClient);
+
+  // ---------------------------------------------------------------------------
+  // Routes
+  // ---------------------------------------------------------------------------
+  await app.register(
+    async (api) => {
+      await api.register(authRoutes, {
+        prefix: '/auth',
+        registerUseCase,
+        loginUseCase,
+      });
+
+      await api.register(tenantRoutes, {
+        prefix: '/tenant',
+        getTenantUseCase,
+        updateTenantUseCase,
+        connectWhatsAppUseCase,
+      });
+
+      await api.register(flowsRoutes, {
+        prefix: '/flows',
+        createFlowUseCase,
+        updateFlowUseCase,
+        activateFlowUseCase,
+        deleteFlowUseCase,
+        getFlowUseCase,
+        listFlowsUseCase,
+      });
+
+      await api.register(kbRoutes, {
+        prefix: '/kb',
+        uploadDocumentUseCase,
+        listDocumentsUseCase,
+        deleteDocumentUseCase,
+      });
+
+      await api.register(conversationsRoutes, {
+        prefix: '/conversations',
+        listConversationsUseCase,
+      });
+
+      await api.register(dryrunRoutes, {
+        prefix: '/dry-run',
+        dryRunUseCase,
+      });
+
+      // Health checks
+      api.get('/health', async () => ({ status: 'ok' }));
+      api.get('/healthz', async () => ({ status: 'ok' }));
+      api.get('/readyz', async (_req, reply) => {
+        try {
+          await redis.ping();
+          return reply.status(200).send({ status: 'ok' });
+        } catch {
+          return reply.status(503).send({ status: 'unavailable' });
+        }
+      });
+    },
+    { prefix: '/api/v1' },
+  );
+
+  // Global error handler
+  app.setErrorHandler((error, _request, reply) => {
+    app.log.error({ err: error }, 'Unhandled error');
+    void reply.status(500).send({
+      data: null,
+      error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+      meta: {},
+    });
+  });
+
+  return app;
+}
+
+// Entrypoint
+const config = loadConfig();
+const app = await buildApp();
+
+try {
+  await app.listen({ port: config.PORT, host: '0.0.0.0' });
+  app.log.info(`Tenant API listening on port ${config.PORT}`);
+} catch (err) {
+  app.log.error(err);
+  process.exit(1);
+}
