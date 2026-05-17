@@ -1,0 +1,70 @@
+name: CI — Python services
+
+on:
+  push:
+    paths:
+      - 'services/flow-engine/**'
+      - 'services/rag-indexer/**'
+  pull_request:
+    paths:
+      - 'services/flow-engine/**'
+      - 'services/rag-indexer/**'
+
+jobs:
+  flow-engine:
+    name: flow-engine — lint + typecheck + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/flow-engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check flow_engine/
+
+      - name: Type check (mypy)
+        run: mypy flow_engine/ --ignore-missing-imports
+
+      - name: Test
+        run: pytest tests/unit/ -v --tb=short
+
+  rag-indexer:
+    name: rag-indexer — lint + typecheck + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/rag-indexer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check rag_indexer/
+
+      - name: Type check (mypy)
+        run: mypy rag_indexer/ --ignore-missing-imports
+
+      - name: Test
+        run: pytest tests/unit/ -v --tb=short
