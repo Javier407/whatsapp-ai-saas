@@ -1,0 +1,10 @@
+# Normalize line endings
+* text=auto
+
+# Shell scripts: enforce LF and mark executable
+*.sh text eol=lf
+infra/seed/seed.sh eol=lf
+infra/e2e/smoke_test.sh eol=lf
+infra/e2e/test_webhook.sh eol=lf
+infra/e2e/test_isolation.sh eol=lf
+infra/migrate.sh eol=lf

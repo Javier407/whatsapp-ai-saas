@@ -9,6 +9,15 @@ export interface IndexingJobPayload {
   enqueued_at: string; // ISO 8601
 }
 
+export interface DeletionJobPayload {
+  job_id: string;
+  tenant_id: string;
+  document_id: string;
+  job_type: 'delete';
+  enqueued_at: string; // ISO 8601
+}
+
 export interface IMessageQueue {
   enqueueIndexingJob(tenantId: string, payload: IndexingJobPayload): Promise<void>;
+  enqueueDeletionJob(tenantId: string, payload: DeletionJobPayload): Promise<void>;
 }

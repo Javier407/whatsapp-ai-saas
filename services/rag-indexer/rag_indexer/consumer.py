@@ -14,6 +14,7 @@ import redis
 
 from rag_indexer.application.index_document import IndexDocumentUseCase
 from rag_indexer.domain.models import IndexingJob
+from rag_indexer.domain.ports import IVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,11 @@ class IndexingConsumer:
         self,
         redis_client: redis.Redis,
         use_case: IndexDocumentUseCase,
+        vector_store: IVectorStore,
     ) -> None:
         self._redis = redis_client
         self._use_case = use_case
+        self._vector_store = vector_store
         self._last_xclaim_check: float = 0.0
 
     # ------------------------------------------------------------------
@@ -128,6 +131,25 @@ class IndexingConsumer:
     ) -> None:
         """Attempt to process one message; ACK on success, log on failure."""
         retry_count = int(fields.get("_retry_count", "0"))
+        # Handle deletion jobs (job_type == 'delete') before parsing as IndexingJob
+        if fields.get("job_type") == "delete":
+            tenant_id = fields.get("tenant_id", "")
+            document_id = fields.get("document_id", "")
+            try:
+                self._vector_store.delete_by_document(tenant_id, document_id)
+                self._ack(stream_key, message_id)
+                logger.info(
+                    "Deletion job processed",
+                    extra={"message_id": message_id, "document_id": document_id},
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to process deletion job",
+                    extra={"message_id": message_id, "document_id": document_id},
+                )
+                self._ack(stream_key, message_id)  # ACK anyway — retry won't help
+            return
+
         try:
             job = IndexingJob.from_stream_message(fields)
         except (KeyError, ValueError):

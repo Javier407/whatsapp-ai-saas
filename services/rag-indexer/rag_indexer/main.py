@@ -180,7 +180,11 @@ def main() -> None:
     logger.info("Heartbeat thread started")
 
     # Consumer (blocking)
-    consumer = IndexingConsumer(redis_client=redis_client, use_case=use_case)
+    consumer = IndexingConsumer(
+        redis_client=redis_client,
+        use_case=use_case,
+        vector_store=vector_store,
+    )
     consumer.run()
 
 
