@@ -249,8 +249,8 @@ def execute_rag_lookup(
     except (KeyError, ValueError):
         query = query_template
 
-    top_k: int = min(int(config.get("top_k", 5)), 20)
-    min_confidence: float = float(config.get("min_confidence", 0.5))
+    top_k: int = min(int(config.get("top_k", 5)), 10)
+    min_confidence: float = float(config.get("min_confidence", 0.75))
     store_in_slot: str = config.get("store_in_slot", "_rag_context")
 
     results = deps.vector_store.query(session.tenant_id, query, top_k=top_k)
@@ -340,9 +340,9 @@ def execute_api_call(
 
     try:
         if method == "GET":
-            resp = httpx.get(url, headers=headers, timeout=10.0)
+            resp = httpx.get(url, headers=headers, timeout=10.0, follow_redirects=False)
         else:
-            resp = httpx.post(url, json=body, headers=headers, timeout=10.0)
+            resp = httpx.post(url, json=body, headers=headers, timeout=10.0, follow_redirects=False)
         resp.raise_for_status()
         response_text = resp.text
     except httpx.HTTPStatusError as exc:

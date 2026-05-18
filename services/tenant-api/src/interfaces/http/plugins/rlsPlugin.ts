@@ -3,9 +3,13 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import { tenantContext } from '../../../infrastructure/prisma/tenantContext.js';
 
 /**
- * Wraps the Fastify handler execution inside AsyncLocalStorage.run(tenantId, ...)
- * so that every Prisma query within the request picks up the correct tenant_id
- * for RLS enforcement.
+ * Sets AsyncLocalStorage tenant context so every Prisma query within the request
+ * picks up the correct tenant_id for RLS enforcement.
+ *
+ * Uses enterWith() instead of run() because run() limits the ALS scope to its
+ * callback — the scope would end before the route handler executes. enterWith()
+ * sets the store for the current async context AND all async operations that
+ * derive from it, including the route handler that Fastify awaits next.
  *
  * Must be registered AFTER authPlugin so request.tenantId is already populated
  * when addHook('preHandler') fires.
@@ -13,26 +17,13 @@ import { tenantContext } from '../../../infrastructure/prisma/tenantContext.js';
 const rlsPluginImpl: FastifyPluginAsync = async (fastify) => {
   fastify.addHook(
     'preHandler',
-    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
       const tenantId = request.tenantId; // set by authPlugin from JWT tid claim
       if (!tenantId) return;
-
-      // We cannot easily wrap the entire handler in ALS from a hook, but we CAN
-      // synchronously enter the store and signal Prisma middleware via the store.
-      // The Prisma $use middleware reads getCurrentTenantId() which reads from ALS.
-      //
-      // Since Fastify's hook and the route handler share the same async chain (await),
-      // entering tenantContext here propagates into the route handler automatically
-      // as long as we keep the ALS binding alive in the async context.
-      //
-      // Implementation: use a sub-task that sets up ALS context and resolves only
-      // after signaling — this binds the ALS to the current async context chain.
-      await tenantContext.run(tenantId, async () => {
-        // Signal back to the outer context that the store is set.
-        // The route handler runs AFTER this hook returns, but within the same
-        // async flow — so ALS propagates forward.
-        await Promise.resolve();
-      });
+      // enterWith() persists the ALS store for the remainder of this async context
+      // chain, so the route handler (which Fastify awaits after this hook) will
+      // read the correct tenantId from getCurrentTenantId().
+      tenantContext.enterWith(tenantId);
     },
   );
 };

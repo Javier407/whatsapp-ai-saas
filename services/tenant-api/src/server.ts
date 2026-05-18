@@ -112,7 +112,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     config.KB_MAX_DOCUMENTS_PER_TENANT,
   );
   const listDocumentsUseCase = new ListDocumentsUseCase(kbRepo);
-  const deleteDocumentUseCase = new DeleteDocumentUseCase(kbRepo, storage);
+  const deleteDocumentUseCase = new DeleteDocumentUseCase(kbRepo, storage, queue);
   const listConversationsUseCase = new ListConversationsUseCase(convLogRepo);
   const dryRunUseCase = new DryRunUseCase(flowEngineClient);
 

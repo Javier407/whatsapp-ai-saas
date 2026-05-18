@@ -3,7 +3,7 @@ import type { CreateFlowNodeInput } from '../../domain/ports/IFlowRepo.js';
 
 const MAX_NODES = 50;
 const MAX_LLM_TOKENS = 1000;
-const MAX_RAG_TOP_K = 20;
+const MAX_RAG_TOP_K = 10;
 
 const ALLOWED_NODE_TYPES = new Set([
   'message',

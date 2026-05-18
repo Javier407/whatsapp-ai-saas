@@ -32,8 +32,8 @@ export class RegisterUseCase {
     if (!input.email.includes('@')) {
       throw new ValidationError('Invalid email address');
     }
-    if (input.password.length < 8) {
-      throw new ValidationError('Password must be at least 8 characters');
+    if (input.password.length < 12) {
+      throw new ValidationError('Password must be at least 12 characters');
     }
     if (!input.tenantName.trim()) {
       throw new ValidationError('Tenant name is required');

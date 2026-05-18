@@ -9,7 +9,7 @@ export class FlowEngineHttpClient implements IFlowEngineClient {
   ) {}
 
   async reloadTenantFlows(tenantId: string): Promise<void> {
-    const url = `${this.baseUrl}/admin/reload-tenant/${tenantId}`;
+    const url = `${this.baseUrl}/admin/flows/${tenantId}/reload`;
     let res: Response;
 
     try {
