@@ -1,0 +1,3 @@
+﻿display_name: Project Documentation Standards
+short_description: Keep whatsapp-ai-saas documentation useful, current, and verifiable.
+default_prompt: Use this skill to decide what documentation must change with code, architecture, setup, testing, deployment, or operations work.

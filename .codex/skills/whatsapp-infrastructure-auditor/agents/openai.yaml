@@ -1,0 +1,3 @@
+﻿display_name: WhatsApp Infrastructure Auditor
+short_description: Audit Docker, Compose, env, deploy, healthchecks, and operations for whatsapp-ai-saas.
+default_prompt: Use this skill to inspect infrastructure changes and identify build, runtime, deployment, secrets, or production-readiness issues.

@@ -23,7 +23,7 @@ import redis
 
 from flow_engine.application.flow_executor import FlowExecutor
 from flow_engine.domain.models import ConversationTurn, InboundMessage, Session
-from flow_engine.domain.ports import IConvLogRepo, ISessionRepo
+from flow_engine.domain.ports import IConvLogRepo, ISessionRepo, ITenantCredentialsRepo
 from flow_engine.infrastructure.redis.redis_lock import (
     RedisLock,
     SessionLockError,
@@ -54,12 +54,14 @@ class FlowEngineConsumer:
         executor: FlowExecutor,
         session_repo: ISessionRepo,
         conv_log_repo: IConvLogRepo,
+        tenant_credentials_repo: ITenantCredentialsRepo,
         meta_send: Any,  # IMetaSendPort — needed for rate-limit replies
     ) -> None:
         self._redis = redis_client
         self._executor = executor
         self._session_repo = session_repo
         self._conv_log_repo = conv_log_repo
+        self._tenant_credentials_repo = tenant_credentials_repo
         self._meta_send = meta_send
         self._last_xclaim_check: float = 0.0
 
@@ -136,6 +138,23 @@ class FlowEngineConsumer:
             )
             self._ack(stream_key, message_id)
             return
+
+        access_token = self._tenant_credentials_repo.get_access_token(
+            msg.tenant_id,
+            msg.phone_number_id,
+        )
+        if not access_token:
+            logger.error(
+                "Missing tenant access token — ACKing",
+                extra={
+                    "tenant_id": msg.tenant_id,
+                    "phone_number_id": msg.phone_number_id,
+                    "message_id": message_id,
+                },
+            )
+            self._ack(stream_key, message_id)
+            return
+        msg.access_token = access_token
 
         log_extra = {
             "tenant_id": msg.tenant_id,
@@ -299,9 +318,32 @@ def _decode_fields(fields: dict[Any, Any]) -> dict[str, str]:
 def _parse_message(fields: dict[str, str]) -> InboundMessage:
     """Parse the stream envelope into an InboundMessage.
 
-    Required fields: message_id, tenant_id, wa_id, text.
-    Optional: phone_number_id, timestamp, access_token.
+    Supports the current JSON envelope in `data` and the legacy flat-field shape.
     """
+    if "data" in fields:
+        payload = json.loads(fields["data"])
+        raw = payload["raw"]
+        messages = raw.get("messages") or []
+        contacts = raw.get("contacts") or []
+        first_message = messages[0] if messages else {}
+        first_contact = contacts[0] if contacts else {}
+        wa_id = (
+            first_message.get("from")
+            or first_contact.get("wa_id")
+            or raw.get("metadata", {}).get("phone_number_id", "")
+        )
+        text = first_message.get("text", {}).get("body", "")
+        timestamp = first_message.get("timestamp", payload.get("received_at", ""))
+        return InboundMessage(
+            message_id=payload["message_id"],
+            tenant_id=payload["tenant_id"],
+            phone_number_id=payload["phone_number_id"],
+            wa_id=wa_id,
+            text=text,
+            timestamp=timestamp,
+            access_token="",
+        )
+
     return InboundMessage(
         message_id=fields["message_id"],
         tenant_id=fields["tenant_id"],

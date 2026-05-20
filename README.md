@@ -63,6 +63,7 @@
 
 - Docker 24+ and Docker Compose v2
 - Node.js 20 LTS (for local development outside Docker; use [nvm](https://github.com/nvm-sh/nvm))
+- pnpm 10 via Corepack (`corepack enable`) for all Node.js services; npm is not used in this repo
 - Python 3.12 (for local development outside Docker; use [pyenv](https://github.com/pyenv/pyenv))
 - `make`, `git`, `openssl` (available on Linux/macOS; Windows users: WSL2 recommended)
 - A Meta Developer account (for WhatsApp Cloud API — free sandbox available at [developers.facebook.com](https://developers.facebook.com))
@@ -243,6 +244,8 @@ Example flow — a simple pricing inquiry:
 ```
 
 When no flow matches, the engine falls back to a RAG + LLM response using the tenant's entire knowledge base.
+
+The flow-engine resolves each tenant's encrypted WhatsApp access token from Postgres using the tenant and phone number IDs, then decrypts it locally before calling Meta. The Redis Stream does **not** carry plaintext access tokens.
 
 ## Testing
 

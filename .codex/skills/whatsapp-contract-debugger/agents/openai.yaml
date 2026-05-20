@@ -1,0 +1,3 @@
+﻿display_name: WhatsApp Contract Debugger
+short_description: Debug service contracts across WhatsApp webhooks, Redis Streams, and flow processing.
+default_prompt: Use this skill to inspect and reconcile contracts between gateway, Redis Streams, flow-engine, rag-indexer, and Meta webhook payloads.

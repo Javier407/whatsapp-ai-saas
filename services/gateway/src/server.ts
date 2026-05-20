@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import pg from 'pg';
 import type { Config } from './config.js';
 import { SignatureVerifier } from './infrastructure/meta/SignatureVerifier.js';

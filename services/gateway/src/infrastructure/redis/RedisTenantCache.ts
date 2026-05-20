@@ -54,7 +54,10 @@ export class RedisTenantCache implements ITenantCache {
       throw new TenantNotFoundError(phoneNumberId);
     }
 
-    const tenantId = result.rows[0].id;
+    const tenantId = result.rows[0]?.id;
+    if (!tenantId) {
+      throw new TenantNotFoundError(phoneNumberId);
+    }
 
     // Populate cache
     await this.redis.set(cacheKey, tenantId, 'EX', this.cacheTtlSeconds);

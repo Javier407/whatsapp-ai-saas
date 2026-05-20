@@ -85,17 +85,17 @@ redis-cli: ## Open redis-cli
 
 test: ## Run all unit tests for all services
 	@echo "--- gateway ---"
-	cd services/gateway && npm test
+	cd services/gateway && pnpm test
 	@echo "--- tenant-api ---"
-	cd services/tenant-api && npm test
+	cd services/tenant-api && pnpm test
 	@echo "--- flow-engine ---"
 	cd services/flow-engine && python -m pytest tests/unit
 	@echo "--- rag-indexer ---"
 	cd services/rag-indexer && python -m pytest tests/unit
 
 lint: ## Lint all services
-	cd services/gateway && npm run lint
-	cd services/tenant-api && npm run lint
+	cd services/gateway && pnpm lint
+	cd services/tenant-api && pnpm lint
 	cd services/flow-engine && python -m ruff check .
 	cd services/rag-indexer && python -m ruff check .
 

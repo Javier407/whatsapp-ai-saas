@@ -1,10 +1,11 @@
 {
   "name": "@whatsapp-saas/tenant-api",
   "version": "0.1.0",
-  "description": "WhatsApp AI SaaS — tenant API service (Fastify / Prisma)",
+  "description": "WhatsApp AI SaaS - tenant API service (Fastify / Prisma)",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "tsc --project tsconfig.json",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
@@ -47,5 +48,15 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma"
+    ]
   }
 }

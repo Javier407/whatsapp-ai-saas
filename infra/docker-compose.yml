@@ -10,6 +10,9 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+  loki_data:
+  grafana_data:
+  pg_backups:
 
 # ---------------------------------------------------------------------------
 # Shared environment anchors
@@ -264,6 +267,81 @@ services:
         condition: service_healthy
     deploy:
       replicas: 2
+
+  # -------------------------------------------------------------------------
+  # Loki — log aggregation backend
+  # -------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:2.9.10
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/tmp/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # Promtail — Docker log shipper → Loki
+  # -------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:2.9.10
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # Grafana — dashboards
+  # -------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.3
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme_grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # pg-backup — daily PostgreSQL dumps to a named volume
+  # -------------------------------------------------------------------------
+  pg-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: whatsapp_saas
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - pg_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # -------------------------------------------------------------------------
   # rag-indexer — document ingestion worker

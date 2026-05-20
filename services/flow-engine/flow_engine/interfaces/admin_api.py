@@ -100,6 +100,7 @@ class DryRunRequest(BaseModel):
 )
 def dry_run(body: DryRunRequest) -> dict[str, Any]:
     """Execute a flow with a RecordingMetaSendClient and return the trace."""
+    import copy
     from datetime import datetime, timezone
 
     from flow_engine.domain.models import InboundMessage, Session
@@ -110,10 +111,11 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
     if executor is None or session_repo is None:
         raise HTTPException(status_code=503, detail="Executor not initialized")
 
+    # Shallow-copy the executor so concurrent dry-run requests each get their
+    # own _meta_send reference without touching the shared production instance.
     recording_client = RecordingMetaSendClient()
-    # Temporarily swap meta_send on the executor for this call
-    original_meta = executor._meta_send
-    executor._meta_send = recording_client
+    dry_executor = copy.copy(executor)
+    dry_executor._meta_send = recording_client
 
     now = datetime.now(timezone.utc).isoformat()
     session = session_repo.load(body.tenant_id, body.simulated_wa_id)
@@ -130,10 +132,7 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
         access_token="dry-run",
     )
 
-    try:
-        executor.execute(msg, session)
-    finally:
-        executor._meta_send = original_meta
+    dry_executor.execute(msg, session)
 
     return {
         "session_state": session.state,

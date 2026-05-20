@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import fastifySensible from '@fastify/sensible';
 import fastifyMultipart from '@fastify/multipart';
 import fp from 'fastify-plugin';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
 import { getPrismaClient } from './infrastructure/prisma/PrismaClient.js';
 import { PrismaTenantRepo } from './infrastructure/prisma/PrismaTenantRepo.js';

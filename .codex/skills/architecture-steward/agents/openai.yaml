@@ -1,0 +1,3 @@
+﻿display_name: Architecture Steward
+short_description: Track architecture decisions, completed work, implementation approach, timestamps, and pending work.
+default_prompt: Use this skill to create or update the architecture ledger after meaningful project changes, including what changed, how, when, verification, and next steps.

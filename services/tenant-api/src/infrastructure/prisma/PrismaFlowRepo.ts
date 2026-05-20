@@ -113,7 +113,7 @@ export class PrismaFlowRepo implements IFlowRepo {
       nodeKey: n.nodeKey,
       type: n.type as FlowNode['type'],
       config: n.config as Record<string, unknown>,
-      transitions: n.transitions as Transition[],
+      transitions: n.transitions as unknown as Transition[],
     }));
 
     const row = await this.prisma.flow.create({

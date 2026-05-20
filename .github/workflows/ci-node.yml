@@ -24,20 +24,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: services/gateway/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: services/gateway/pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: corepack enable
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Test with coverage
-        run: npm test -- --coverage
+        run: pnpm test -- --coverage
 
       - name: Coverage gate (80% application layer)
-        run: npx jest --coverage --coverageThreshold='{"global":{"lines":80}}'
+        run: pnpm exec jest --coverage --coverageThreshold='{"global":{"lines":80}}'
 
   tenant-api:
     name: tenant-api — lint + test
@@ -52,14 +55,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: services/tenant-api/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: services/tenant-api/pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: corepack enable
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Test with coverage
-        run: npm test -- --coverage
+        run: pnpm test -- --coverage

@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { DeletionJobPayload, IMessageQueue, IndexingJobPayload } from '../../domain/ports/IMessageQueue.js';
 import { ExternalServiceError } from '../../domain/errors.js';
 

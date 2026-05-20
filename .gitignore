@@ -61,3 +61,4 @@ logs/
 # Misc
 .turbo/
 .cache/
+.atl/

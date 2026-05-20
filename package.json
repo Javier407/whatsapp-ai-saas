@@ -1,0 +1,10 @@
+{
+  "name": "whatsapp-ai-saas",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "gateway": "pnpm --dir services/gateway",
+    "tenant-api": "pnpm --dir services/tenant-api",
+    "dashboard": "pnpm --dir services/dashboard"
+  }
+}

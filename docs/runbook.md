@@ -1,4 +1,4 @@
-# Operations Runbook
+﻿# Operations Runbook
 
 ## Local Development
 
@@ -144,11 +144,11 @@ make smoke
 ### Running migrations in production
 
 ```bash
-# Apply all pending migrations (idempotent — safe to run multiple times)
-docker compose -f infra/docker-compose.yml run --rm tenant-api npx prisma migrate deploy
+# Apply all pending migrations (idempotent â€” safe to run multiple times)
+docker compose -f infra/docker-compose.yml run --rm tenant-api pnpm exec prisma migrate deploy
 
 # Check migration status
-docker compose -f infra/docker-compose.yml run --rm tenant-api npx prisma migrate status
+docker compose -f infra/docker-compose.yml run --rm tenant-api pnpm exec prisma migrate status
 ```
 
 ### Updating a service (zero-downtime rolling)
@@ -298,7 +298,7 @@ FROM worker_heartbeats;
      -H "Authorization: Bearer <jwt>" \
      -H "Content-Type: application/json" \
      -d '{"message":"your test message","simulated_wa_id":"test-1"}'
-   # Response includes "trace" array — inspect node execution path and RAG confidence scores
+   # Response includes "trace" array â€” inspect node execution path and RAG confidence scores
    ```
 
 2. **Check RAG confidence scores in conversation_logs:**
@@ -337,7 +337,7 @@ FROM worker_heartbeats;
 NEW_KEY=$(openssl rand -hex 32)
 
 # 2. Run the rotation script (decrypt with old key, re-encrypt with new key)
-# [TODO: implement rotate_master_key.py — decrypt all tenants.access_token with old MASTER_KEY, re-encrypt with NEW_KEY]
+# [TODO: implement rotate_master_key.py â€” decrypt all tenants.access_token with old MASTER_KEY, re-encrypt with NEW_KEY]
 
 # 3. Update infra/.env with the new MASTER_KEY
 sed -i "s/^MASTER_KEY=.*/MASTER_KEY=$NEW_KEY/" infra/.env
@@ -391,7 +391,7 @@ In MVP, all tenants share a single sandbox WhatsApp Business Account. For produc
 
 ### Step-by-step
 
-1. **Apply for Tech Provider status** at [developers.facebook.com/docs/whatsapp/embedded-signup](https://developers.facebook.com/docs/whatsapp/embedded-signup). Requires a business verification (Meta Partner Center account). Review takes 1–4 weeks.
+1. **Apply for Tech Provider status** at [developers.facebook.com/docs/whatsapp/embedded-signup](https://developers.facebook.com/docs/whatsapp/embedded-signup). Requires a business verification (Meta Partner Center account). Review takes 1â€“4 weeks.
 
 2. **Set up Embedded Signup** in your Meta App:
    - Enable "WhatsApp Embedded Signup" product
@@ -413,3 +413,4 @@ In MVP, all tenants share a single sandbox WhatsApp Business Account. For produc
    Exchange `code` for a system user access token via `POST https://graph.facebook.com/v21.0/oauth/access_token`.
 
 5. **No architectural changes required.** All tenant isolation (RLS, Redis namespacing, ChromaDB collections) is already in place and production-ready.
+

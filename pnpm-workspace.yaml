@@ -1,0 +1,4 @@
+packages:
+  - "services/gateway"
+  - "services/tenant-api"
+  - "services/dashboard"

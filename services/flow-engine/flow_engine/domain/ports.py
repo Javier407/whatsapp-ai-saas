@@ -26,6 +26,11 @@ class IFlowRepo(ABC):
     def reload_tenant(self, tenant_id: str) -> None: ...
 
 
+class ITenantCredentialsRepo(ABC):
+    @abstractmethod
+    def get_access_token(self, tenant_id: str, phone_number_id: str) -> str | None: ...
+
+
 class IMetaSendPort(ABC):
     @abstractmethod
     def send_text(

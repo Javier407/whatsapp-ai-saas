@@ -2,13 +2,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
+RUN pnpm build
 
 # ---------------------------------------------------------------------------
 # Runtime image — no devDependencies, no TypeScript compiler
@@ -21,7 +21,7 @@ ENV NODE_ENV=production
 # Copy production artifacts only
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
+COPY package.json ./
 
 # Run as non-root for security
 USER node

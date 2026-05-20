@@ -15,6 +15,7 @@ _REQUIRED = [
     "CHROMADB_PORT",
     "OPENAI_API_KEY",
     "INTERNAL_TOKEN",
+    "MASTER_KEY",
 ]
 
 
@@ -51,5 +52,5 @@ def load_config() -> Config:
         internal_token=os.environ["INTERNAL_TOKEN"],
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
         flow_engine_port=int(os.environ.get("FLOW_ENGINE_PORT", "8001")),
-        master_key=os.environ.get("MASTER_KEY", ""),
+        master_key=os.environ["MASTER_KEY"],
     )

@@ -29,6 +29,7 @@ from flow_engine.infrastructure.llm.langchain_llm import LangChainLLMPort
 from flow_engine.infrastructure.meta.meta_send_client import MetaSendClient
 from flow_engine.infrastructure.postgres.postgres_conv_log import PostgresConvLogRepo
 from flow_engine.infrastructure.postgres.postgres_flow_repo import PostgresFlowRepo
+from flow_engine.infrastructure.postgres.postgres_tenant_credentials_repo import PostgresTenantCredentialsRepo
 from flow_engine.infrastructure.redis.redis_session_repo import RedisSessionRepo
 from flow_engine.interfaces.admin_api import _state, app
 from flow_engine.interfaces.consumer import FlowEngineConsumer
@@ -92,6 +93,10 @@ def main() -> None:
     flow_repo = PostgresFlowRepo(connection_string=cfg.database_url)
     session_repo = RedisSessionRepo(redis_client=redis_client)
     conv_log_repo = PostgresConvLogRepo(connection_string=cfg.database_url)
+    tenant_credentials_repo = PostgresTenantCredentialsRepo(
+        connection_string=cfg.database_url,
+        master_key=cfg.master_key,
+    )
     meta_send = MetaSendClient()
     vector_store = ChromaRetriever(
         host=cfg.chromadb_host,
@@ -116,6 +121,7 @@ def main() -> None:
         executor=executor,
         session_repo=session_repo,
         conv_log_repo=conv_log_repo,
+        tenant_credentials_repo=tenant_credentials_repo,
         meta_send=meta_send,
     )
 

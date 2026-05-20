@@ -1,7 +1,7 @@
 {
   "name": "gateway",
   "version": "0.1.0",
-  "description": "WhatsApp AI SaaS — gateway service (Meta webhook receiver)",
+  "description": "WhatsApp AI SaaS - gateway service (Meta webhook receiver)",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
@@ -38,5 +38,11 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
