@@ -1,3 +1,5 @@
+// Native ESM jest does not inject the `jest` global; it must be imported.
+import { jest } from '@jest/globals';
 import { RegisterUseCase } from '../../src/application/auth/RegisterUseCase.js';
 import { ConflictError, ValidationError } from '../../src/domain/errors.js';
 import type { ITenantRepo } from '../../src/domain/ports/ITenantRepo.js';
