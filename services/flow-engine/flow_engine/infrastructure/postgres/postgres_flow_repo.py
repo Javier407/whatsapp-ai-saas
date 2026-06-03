@@ -95,6 +95,9 @@ class PostgresFlowRepo(IFlowRepo):
                 # Load flow_nodes for all active flows
                 flow_ids = list(flows_map.keys())
                 placeholders = ",".join(["%s"] * len(flow_ids))
+                # NOTE: `meta` (UI-only node positions, migration 006) is intentionally
+                # excluded from this SELECT — it is presentation state and must never
+                # influence runtime flow execution.
                 cur.execute(
                     f"""
                     SELECT id, flow_id, node_type, config, transitions, is_entry

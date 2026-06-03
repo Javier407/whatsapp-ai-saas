@@ -5,6 +5,8 @@ export interface CreateFlowNodeInput {
   type: NodeType;
   config: Record<string, unknown>;
   transitions: Transition[];
+  /** UI-only presentation state (e.g. canvas position). Optional on input; defaults to {}. */
+  meta?: Record<string, unknown>;
 }
 
 export interface CreateFlowInput {

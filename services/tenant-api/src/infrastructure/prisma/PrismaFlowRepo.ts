@@ -14,6 +14,7 @@ function mapNode(row: {
   type: string;
   config: unknown;
   transitions: unknown;
+  meta: unknown;
   createdAt: Date;
 }): FlowNode {
   return {
@@ -24,6 +25,7 @@ function mapNode(row: {
     type: row.type as FlowNode['type'],
     config: row.config as Record<string, unknown>,
     transitions: row.transitions as Transition[],
+    meta: (row.meta ?? {}) as Record<string, unknown>,
     createdAt: row.createdAt,
   };
 }
@@ -102,6 +104,7 @@ export class PrismaFlowRepo implements IFlowRepo {
             type: n.type as never,
             config: n.config as never,
             transitions: n.transitions as never,
+            ...(n.meta !== undefined ? { meta: n.meta as never } : {}),
           })),
         },
       },
@@ -122,6 +125,7 @@ export class PrismaFlowRepo implements IFlowRepo {
       type: n.type as FlowNode['type'],
       config: n.config as Record<string, unknown>,
       transitions: n.transitions as unknown as Transition[],
+      meta: n.meta as Record<string, unknown>,
     }));
 
     const row = await this.prisma.flow.create({
@@ -140,6 +144,7 @@ export class PrismaFlowRepo implements IFlowRepo {
             type: n.type as never,
             config: n.config as never,
             transitions: n.transitions as never,
+            ...(n.meta !== undefined ? { meta: n.meta as never } : {}),
           })),
         },
       },

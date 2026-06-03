@@ -146,6 +146,7 @@ model FlowNode {
   type        NodeType
   config      Json
   transitions Json     @default("[]")
+  meta        Json     @default("{}") // UI-only presentation state (node positions); ignored by flow-engine
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   flow   Flow   @relation(fields: [flowId], references: [id], onDelete: Cascade)
