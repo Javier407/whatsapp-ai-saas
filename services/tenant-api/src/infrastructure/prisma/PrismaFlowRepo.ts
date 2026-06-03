@@ -71,6 +71,14 @@ export class PrismaFlowRepo implements IFlowRepo {
     return row ? mapFlowWithNodes(row) : null;
   }
 
+  async findByIdForTenant(tenantId: string, flowId: string): Promise<FlowWithNodes | null> {
+    const row = await this.prisma.flow.findFirst({
+      where: { id: flowId, tenantId },
+      include: { nodes: true },
+    });
+    return row ? mapFlowWithNodes(row) : null;
+  }
+
   async listByTenant(tenantId: string): Promise<Flow[]> {
     const rows = await this.prisma.flow.findMany({
       where: { tenantId },

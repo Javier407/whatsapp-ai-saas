@@ -19,6 +19,7 @@ from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSen
 logger = logging.getLogger(__name__)
 
 _MAX_ITERATIONS = 20
+_MAX_HISTORY = 10
 
 
 class FlowExecutor:
@@ -42,10 +43,8 @@ class FlowExecutor:
         """Process one inbound message, mutating *session* in place."""
         now = _now_iso()
 
-        # Append user turn to history (cap at 10)
-        session.history.append({"role": "user", "content": message.text, "ts": now})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        # Append user turn to history (capped at _MAX_HISTORY)
+        _append_to_history(session, {"role": "user", "content": message.text, "ts": now})
 
         deps = ExecutorDeps(
             meta_send=self._meta_send,
@@ -181,7 +180,7 @@ class FlowExecutor:
         try:
             reply_text, tokens = self._llm.generate(
                 system_prompt="You are a helpful WhatsApp assistant. Answer concisely.",
-                history=session.history[-10:],
+                history=session.history[-_MAX_HISTORY:],
                 user_message=message.text,
                 rag_context=rag_context,
                 max_tokens=500,
@@ -201,9 +200,7 @@ class FlowExecutor:
             access_token=message.access_token,
         )
 
-        session.history.append({"role": "assistant", "content": reply_text, "ts": _now_iso()})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        _append_to_history(session, {"role": "assistant", "content": reply_text, "ts": _now_iso()})
 
         session.state = "IDLE"
 
@@ -215,16 +212,21 @@ class FlowExecutor:
     ) -> None:
         """Append assistant reply to history."""
         if result.reply:
-            session.history.append(
-                {"role": "assistant", "content": result.reply, "ts": _now_iso()}
+            _append_to_history(
+                session, {"role": "assistant", "content": result.reply, "ts": _now_iso()}
             )
-            if len(session.history) > 10:
-                session.history = session.history[-10:]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _append_to_history(session: Session, turn: dict[str, Any]) -> None:
+    """Append a turn and keep only the last _MAX_HISTORY entries."""
+    session.history.append(turn)
+    if len(session.history) > _MAX_HISTORY:
+        session.history = session.history[-_MAX_HISTORY:]
 
 
 def _find_flow(flows: list[Flow], flow_id: str | None) -> Flow | None:

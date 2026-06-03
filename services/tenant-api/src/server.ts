@@ -149,6 +149,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         uploadDocumentUseCase,
         listDocumentsUseCase,
         deleteDocumentUseCase,
+        maxFileSizeBytes: config.KB_MAX_FILE_SIZE_MB * 1024 * 1024,
       });
 
       await api.register(conversationsRoutes, {

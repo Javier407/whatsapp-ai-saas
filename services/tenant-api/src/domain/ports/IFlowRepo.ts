@@ -26,6 +26,7 @@ export interface UpdateFlowInput {
 
 export interface IFlowRepo {
   findById(id: string): Promise<FlowWithNodes | null>;
+  findByIdForTenant(tenantId: string, flowId: string): Promise<FlowWithNodes | null>;
   listByTenant(tenantId: string): Promise<Flow[]>;
   create(input: CreateFlowInput): Promise<FlowWithNodes>;
   /** Creates a new version of the flow; increments version number. */

@@ -17,10 +17,8 @@ export class UpdateFlowUseCase {
     flowId: string,
     input: UpdateFlowInput,
   ): Promise<FlowWithNodes> {
-    const existing = await this.flowRepo.findById(flowId);
-    if (!existing || existing.tenantId !== tenantId) {
-      throw new NotFoundError('Flow', flowId);
-    }
+    const existing = await this.flowRepo.findByIdForTenant(tenantId, flowId);
+    if (!existing) throw new NotFoundError('Flow', flowId);
 
     // Validate the merged graph before creating a new version
     const nodes = input.nodes ?? existing.nodes;
