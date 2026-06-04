@@ -79,9 +79,42 @@ export type Flow = {
   updated_at: string;
 };
 
+export type FlowNodeDto = {
+  id: string;
+  node_key: string;
+  type:
+    | "message"
+    | "interactive"
+    | "collect_input"
+    | "condition"
+    | "rag_lookup"
+    | "llm_generate"
+    | "api_call"
+    | "end";
+  config: Record<string, unknown>;
+  transitions: Array<{ next: string; condition?: string }>;
+  meta: { position?: { x: number; y: number } } & Record<string, unknown>;
+};
+
+export type FlowWithNodes = Flow & { nodes: FlowNodeDto[] };
+
+export type UpdateFlowDto = {
+  name?: string;
+  description?: string;
+  trigger?: Record<string, unknown>;
+  entry_node?: string;
+  nodes?: Array<{
+    node_key: string;
+    type: FlowNodeDto["type"];
+    config: Record<string, unknown>;
+    transitions: Array<{ next: string; condition?: string }>;
+    meta?: Record<string, unknown>;
+  }>;
+};
+
 export const flows = {
   list: () => request<Flow[]>("/flows"),
-  get: (id: string) => request<Flow>(`/flows/${id}`),
+  get: (id: string) => request<FlowWithNodes>(`/flows/${id}`),
   create: (data: unknown) =>
     request<Flow>("/flows", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: unknown) =>

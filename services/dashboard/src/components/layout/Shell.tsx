@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { createContext, useContext, type ReactNode, useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,7 +35,35 @@ const pageTitles: Record<string, string> = {
   "/settings": "Ajustes",
 };
 
-export function Shell({ children }: { children: ReactNode }) {
+const ShellVariantContext = createContext<"default" | "canvas">("default");
+
+/**
+ * Lets a page opt into the canvas (full-bleed) layout. NOTE: the shared Shell
+ * wraps all routes, so a provider rendered *inside* a page cannot reach Shell
+ * via context (context flows down, not up). Shell therefore also detects the
+ * editor route by pathname; this provider is kept for explicit overrides.
+ */
+export function useShellVariant() {
+  return useContext(ShellVariantContext);
+}
+
+export function ShellVariantProvider({
+  value,
+  children,
+}: {
+  value: "default" | "canvas";
+  children: ReactNode;
+}) {
+  return <ShellVariantContext.Provider value={value}>{children}</ShellVariantContext.Provider>;
+}
+
+export function Shell({
+  children,
+  variant = "default",
+}: {
+  children: ReactNode;
+  variant?: "default" | "canvas";
+}) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -49,6 +77,17 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const connected = Boolean(tenantData?.phone_number_id);
   const pageTitle = pageTitles[pathname] ?? "Panel";
+
+  const ctxVariant = useContext(ShellVariantContext);
+  const isEditorRoute = /^\/flows\/[^/]+\/edit$/.test(pathname);
+  const effectiveVariant: "default" | "canvas" =
+    variant !== "default"
+      ? variant
+      : ctxVariant !== "default"
+        ? ctxVariant
+        : isEditorRoute
+          ? "canvas"
+          : "default";
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
@@ -220,7 +259,14 @@ export function Shell({ children }: { children: ReactNode }) {
           </Button>
           <h1 className="text-lg font-semibold truncate">{pageTitle}</h1>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main
+          className={cn(
+            "flex-1 min-h-0",
+            effectiveVariant === "canvas" ? "overflow-hidden" : "overflow-auto p-4 md:p-6",
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
