@@ -1,0 +1,3 @@
+display_name: E2E Smoke Validator
+short_description: Run and interpret the whatsapp-ai-saas E2E smoke suite with service-level context.
+default_prompt: Use this skill after changes to inter-service boundaries, infra, migrations, or deployment config to run make e2e/smoke and classify failures by responsible service.

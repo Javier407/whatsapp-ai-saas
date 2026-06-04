@@ -1,0 +1,3 @@
+display_name: Redis Stream Contract
+short_description: Enforce backward-compatible evolution of Redis Stream schemas in whatsapp-ai-saas.
+default_prompt: Use this skill when adding, renaming, or removing fields in the flow-engine or indexing Redis Streams, or when editing infra/contracts/*.schema.json.
