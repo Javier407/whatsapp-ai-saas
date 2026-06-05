@@ -13,7 +13,7 @@ from typing import Any
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
 from flow_engine.application.trigger_matcher import match_trigger
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
-from flow_engine.domain.models import Flow, FlowNode, InboundMessage, Session
+from flow_engine.domain.models import Flow, InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSendPort, IVectorStore
 
 logger = logging.getLogger(__name__)

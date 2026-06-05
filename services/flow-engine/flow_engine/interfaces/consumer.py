@@ -26,7 +26,6 @@ from flow_engine.domain.models import ConversationTurn, InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, ISessionRepo, ITenantCredentialsRepo
 from flow_engine.infrastructure.redis.redis_lock import (
     RedisLock,
-    SessionLockError,
     is_processed,
     mark_processed,
 )

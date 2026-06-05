@@ -11,11 +11,10 @@ All endpoints require X-Internal-Token header (shared secret).
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 import redis as redis_module
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
