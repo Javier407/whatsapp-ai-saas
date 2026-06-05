@@ -37,14 +37,14 @@
    * The xyflow base stylesheet itself is imported from the lazy FlowEditor entry
    * (import "@xyflow/react/dist/style.css") so it ships only in the editor chunk,
    * keeping it off the home route (bundle isolation, VFB-01). */
+
+  /* Custom node components own their box (border/bg/ring/error). Reset xyflow's
+   * default node chrome so it does not double up with the component's box. */
   .react-flow__node {
-    @apply rounded-md border bg-card text-card-foreground shadow-sm;
-  }
-  .react-flow__node.selected {
-    @apply ring-2 ring-ring;
-  }
-  .react-flow__node.flow-node-error {
-    @apply border-destructive ring-2 ring-destructive;
+    background: transparent;
+    border: none;
+    padding: 0;
+    border-radius: 0;
   }
   .react-flow__edge-path {
     stroke: hsl(var(--muted-foreground));

@@ -10,6 +10,14 @@ import {
   StopCircle,
 } from "lucide-react";
 import type { NodeType } from "./types";
+import { MessageNode } from "../nodes/MessageNode";
+import { InteractiveNode } from "../nodes/InteractiveNode";
+import { CollectInputNode } from "../nodes/CollectInputNode";
+import { ConditionNode } from "../nodes/ConditionNode";
+import { RagLookupNode } from "../nodes/RagLookupNode";
+import { LlmGenerateNode } from "../nodes/LlmGenerateNode";
+import { ApiCallNode } from "../nodes/ApiCallNode";
+import { EndNode } from "../nodes/EndNode";
 
 /** Per-node-type metadata: palette label, icon, accent color, and the default
  *  config used when a new node of this type is created. */
@@ -27,9 +35,15 @@ export const NODE_REGISTRY: Record<
   end: { label: "Fin", icon: StopCircle, color: "text-slate-500", defaultConfig: {} },
 };
 
-/**
- * Maps a node type to its custom xyflow renderer. Populated in T-B14 once the
- * node components (T-B10..T-B17) exist. Empty until then.
- */
+/** Maps a node type to its custom xyflow renderer (passed to <ReactFlow nodeTypes>). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const NODE_TYPES_MAP: Record<string, ComponentType<any>> = {};
+export const NODE_TYPES_MAP: Record<string, ComponentType<any>> = {
+  message: MessageNode,
+  interactive: InteractiveNode,
+  collect_input: CollectInputNode,
+  condition: ConditionNode,
+  rag_lookup: RagLookupNode,
+  llm_generate: LlmGenerateNode,
+  api_call: ApiCallNode,
+  end: EndNode,
+};
