@@ -109,8 +109,6 @@ class InboundMessage:
 
     @classmethod
     def from_stream_fields(cls, fields: dict[str, str]) -> "InboundMessage":
-        import json as _json
-        payload = _json.loads(fields.get("payload", "{}"))
         return cls(
             message_id=fields["message_id"],
             tenant_id=fields["tenant_id"],
