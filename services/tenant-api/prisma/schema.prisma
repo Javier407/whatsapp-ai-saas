@@ -5,6 +5,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // node:20-alpine ships OpenSSL 3 under musl; without this target Prisma
+  // falls back to the openssl-1.1.x engine and fails to load at runtime
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -14,56 +17,12 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Enums
+// Enum-like fields are String here: the SQL migrations define these columns
+// as TEXT + CHECK constraints, not Postgres enum types. Declaring Prisma
+// enums would make the client cast to non-existent types (error 42704).
+// Allowed values are enforced by the database CHECK constraints and typed
+// in the domain layer (src/domain/models/).
 // ---------------------------------------------------------------------------
-
-enum Plan {
-  free
-  pro
-  enterprise
-}
-
-enum TenantStatus {
-  active
-  suspended
-  offboarded
-}
-
-enum UserRole {
-  owner
-  admin
-  viewer
-}
-
-enum NodeType {
-  message
-  interactive
-  collect_input
-  condition
-  rag_lookup
-  llm_generate
-  api_call
-  end
-}
-
-enum SourceType {
-  text
-  pdf
-  faq_json
-  markdown
-}
-
-enum DocumentStatus {
-  pending
-  indexing
-  indexed
-  failed
-}
-
-enum Direction {
-  inbound
-  outbound
-}
 
 // ---------------------------------------------------------------------------
 // Tenant
@@ -76,8 +35,8 @@ model Tenant {
   wabaId        String?      @map("waba_id")
   phoneNumberId String?      @unique @map("phone_number_id")
   accessToken   String?      @map("access_token") // encrypted ciphertext (AES-256-GCM)
-  plan          Plan         @default(free)
-  status        TenantStatus @default(active)
+  plan          String       @default("free")
+  status        String       @default("active")
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -99,7 +58,7 @@ model User {
   tenantId     String   @map("tenant_id") @db.Uuid
   email        String
   passwordHash String   @map("password_hash")
-  role         UserRole @default(admin)
+  role         String   @default("admin")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -143,7 +102,7 @@ model FlowNode {
   flowId      String   @map("flow_id") @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   nodeKey     String   @map("node_key")
-  type        NodeType
+  type        String
   config      Json
   transitions Json     @default("[]")
   meta        Json     @default("{}") // UI-only presentation state (node positions); ignored by flow-engine
@@ -165,9 +124,9 @@ model KnowledgeBaseDocument {
   id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String         @map("tenant_id") @db.Uuid
   name         String
-  sourceType   SourceType     @map("source_type")
+  sourceType   String         @map("source_type")
   storageUri   String         @map("storage_uri")
-  status       DocumentStatus @default(pending)
+  status       String         @default("pending")
   chunkCount   Int?           @map("chunk_count")
   errorMessage String?        @map("error_message")
   uploadedAt   DateTime       @default(now()) @map("uploaded_at") @db.Timestamptz
@@ -187,7 +146,7 @@ model ConversationLog {
   id          BigInt    @id @default(autoincrement())
   tenantId    String    @map("tenant_id") @db.Uuid
   waId        String    @map("wa_id")
-  direction   Direction
+  direction   String
   messageType String    @map("message_type")
   content     Json
   flowId      String?   @map("flow_id") @db.Uuid
