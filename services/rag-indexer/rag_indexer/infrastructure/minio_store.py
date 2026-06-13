@@ -24,6 +24,12 @@ class MinioDocumentStore(IDocumentStore):
         secret_key: str,
         secure: bool = False,
     ) -> None:
+        # S3_ENDPOINT arrives as a full URL (http://minio:9000) but the
+        # minio client wants a bare host:port plus a separate secure flag
+        if "://" in endpoint:
+            parsed = urlparse(endpoint)
+            secure = parsed.scheme == "https"
+            endpoint = parsed.netloc
         self._client = Minio(
             endpoint,
             access_key=access_key,
