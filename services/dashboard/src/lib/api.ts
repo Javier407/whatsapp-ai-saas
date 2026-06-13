@@ -31,10 +31,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export type LoginResponse = { token: string; tenant_id: string; expires_at: string };
 
 export const auth = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, tenantSlug: string) =>
     request<LoginResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, tenant_slug: tenantSlug }),
     }),
 };
 
@@ -180,7 +180,10 @@ export const conversations = {
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     if (params?.limit) qs.set("limit", String(params.limit));
-    return request<ConversationLog[]>(`/conversations?${qs}`);
+    // The endpoint returns a paginated envelope: { data: [...], meta: {...} }
+    return request<{ data: ConversationLog[]; meta: { total: number; limit: number; offset: number } }>(
+      `/conversations?${qs}`,
+    ).then((page) => page.data);
   },
 };
 
@@ -188,12 +191,25 @@ export const conversations = {
 
 export type DryRunResult = {
   reply: string;
-  flow_id: string | null;
-  trace: unknown[];
+  session_state: string;
+  sent: { type: string; to: string; text?: string }[];
 };
 
+// flow-engine returns { session_state, current_node, slots, sent: [...] };
+// flatten the sent messages into a single reply string for display.
 export const dryRun = (message: string, simulated_wa_id = "test-preview") =>
-  request<DryRunResult>("/dry-run", {
+  request<{
+    session_state: string;
+    current_node: string | null;
+    slots: Record<string, unknown>;
+    sent: { type: string; to: string; text?: string }[];
+  }>("/dry-run", {
     method: "POST",
     body: JSON.stringify({ message, simulated_wa_id }),
-  });
+  }).then((r) => ({
+    reply:
+      r.sent.map((s) => s.text).filter(Boolean).join("\n\n") ||
+      "(sin respuesta)",
+    session_state: r.session_state,
+    sent: r.sent,
+  }));
