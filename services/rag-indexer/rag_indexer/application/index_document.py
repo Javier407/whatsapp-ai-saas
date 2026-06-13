@@ -52,20 +52,27 @@ def _extract_text_pdf(raw: bytes) -> str:
         raise ValueError(f"PDF extraction failed: {exc}") from exc
 
 
-def _extract_text_faq_json(raw: bytes) -> str:
+def _parse_faq_pairs(raw: bytes) -> list[str]:
+    """Parse FAQ JSON into one ``"Q: ...\\nA: ..."`` string per question/answer pair."""
     try:
         items: list[dict[str, str]] = json.loads(raw.decode("utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid FAQ JSON: {exc}") from exc
     if not isinstance(items, list):
         raise ValueError("FAQ JSON must be a list of {question, answer} objects")
-    parts: list[str] = []
+    pairs: list[str] = []
     for item in items:
-        q = item.get("question", "").strip()
-        a = item.get("answer", "").strip()
+        if not isinstance(item, dict):
+            continue
+        q = str(item.get("question", "")).strip()
+        a = str(item.get("answer", "")).strip()
         if q or a:
-            parts.append(f"Q: {q}\nA: {a}")
-    return "\n\n".join(parts)
+            pairs.append(f"Q: {q}\nA: {a}")
+    return pairs
+
+
+def _extract_text_faq_json(raw: bytes) -> str:
+    return "\n\n".join(_parse_faq_pairs(raw))
 
 
 def _extract_text_markdown(raw: bytes) -> str:
@@ -170,6 +177,24 @@ def chunk_text(
     return result
 
 
+def chunk_faq(raw: bytes, chunk_size: int = 512, overlap: int = 50) -> list[str]:
+    """Chunk FAQ JSON as ONE chunk per question/answer pair.
+
+    Each pair embeds as a single coherent unit, so a customer question matches
+    the relevant pair directly. Joining the whole FAQ into one string (as the
+    generic text path does) collapses short FAQs into a single averaged
+    embedding and dilutes per-question retrieval. A pair longer than
+    *chunk_size* falls back to the recursive ``chunk_text`` splitter.
+    """
+    chunks: list[str] = []
+    for pair in _parse_faq_pairs(raw):
+        if len(pair) <= chunk_size:
+            chunks.append(pair)
+        else:
+            chunks.extend(chunk_text(pair, chunk_size=chunk_size, overlap=overlap))
+    return chunks
+
+
 # ---------------------------------------------------------------------------
 # Use case
 # ---------------------------------------------------------------------------
@@ -256,19 +281,30 @@ class IndexDocumentUseCase:
         # Step 2: download from object storage
         raw_bytes, _content_type = self._document_store.download(job.storage_uri)
 
-        # Step 3: extract text (PII risk — log metadata only, never content)
-        text = extract_text(raw_bytes, job.source_type)
-        logger.info(
-            "Text extracted",
-            extra={
-                "document_id": job.document_id,
-                "char_count": len(text),
-                "source_type": job.source_type,
-            },
-        )
-
-        # Step 4: chunk
-        raw_chunks = chunk_text(text, chunk_size=512, overlap=50)
+        # Step 3 + 4: extract and chunk (PII risk — log metadata only, never content).
+        # faq_json is chunked per Q&A pair so each pair embeds as a coherent unit;
+        # every other type extracts to plain text then recursively splits.
+        if job.source_type == "faq_json":
+            raw_chunks = chunk_faq(raw_bytes, chunk_size=512, overlap=50)
+            logger.info(
+                "FAQ parsed into per-pair chunks",
+                extra={
+                    "document_id": job.document_id,
+                    "pair_count": len(raw_chunks),
+                    "source_type": job.source_type,
+                },
+            )
+        else:
+            text = extract_text(raw_bytes, job.source_type)
+            logger.info(
+                "Text extracted",
+                extra={
+                    "document_id": job.document_id,
+                    "char_count": len(text),
+                    "source_type": job.source_type,
+                },
+            )
+            raw_chunks = chunk_text(text, chunk_size=512, overlap=50)
         if not raw_chunks:
             logger.warning(
                 "No text extracted — marking as indexed with 0 chunks",
