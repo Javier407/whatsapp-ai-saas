@@ -1,4 +1,6 @@
-version: "3.8"
+# Project name pins container names to whatsapp-ai-saas-* regardless of the
+# directory this file lives in (smoke tests derive container names from it).
+name: whatsapp-ai-saas
 
 # ---------------------------------------------------------------------------
 # Named volumes
@@ -53,6 +55,10 @@ services:
   # The entrypoint renders users.acl.tpl → users.acl via envsubst so that
   # shell variables (${REDIS_*_PASSWORD}) are expanded before Redis reads
   # the ACL file. Redis 7 does NOT expand env vars in ACL files natively.
+  # ACL file format: one `user ...` directive per line — comments and
+  # backslash continuations are NOT supported and abort startup.
+  # The default user stays enabled but restricted to +ping: the healthcheck
+  # below authenticates as default with REDIS_DEFAULT_PASSWORD.
   # -------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -239,7 +245,7 @@ services:
       ADMIN_PORT: 8001
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       REDIS_URL: redis://flow_engine_user:${REDIS_FLOW_ENGINE_PASSWORD}@redis:6379/0
-      POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      DATABASE_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
       CHROMADB_HOST: chromadb
       CHROMADB_PORT: 8000
       META_API_BASE: ${META_API_BASE:-https://graph.facebook.com/v21.0}
@@ -354,7 +360,7 @@ services:
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       REDIS_URL: redis://rag_indexer_user:${REDIS_RAG_INDEXER_PASSWORD}@redis:6379/0
-      POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
+      DATABASE_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/whatsapp_saas
       CHROMADB_HOST: chromadb
       CHROMADB_PORT: 8000
       S3_ENDPOINT: http://minio:9000

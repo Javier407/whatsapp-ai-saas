@@ -134,10 +134,11 @@ check_http "Tenant API /api/v1/health returns 200" "${TENANT_API_URL}/api/v1/hea
 # Check 3: Flow engine admin health (via docker exec)
 # ---------------------------------------------------------------------------
 echo -n "  Checking flow-engine admin /admin/health... "
+# The python:3.12-slim image has no curl/wget; use stdlib urllib instead.
+# The internal token is read from the container's own environment.
 if docker exec "${FLOW_ENGINE_CONTAINER}" \
-    curl -s -f \
-    -H "X-Internal-Token: ${INTERNAL_TOKEN}" \
-    http://localhost:8001/admin/health > /tmp/waas-smoke-fe.tmp 2>&1; then
+    python -c "import os, sys, urllib.request; req = urllib.request.Request('http://localhost:8001/admin/health', headers={'X-Internal-Token': os.environ.get('INTERNAL_TOKEN', '')}); sys.exit(0 if urllib.request.urlopen(req, timeout=5).status == 200 else 1)" \
+    > /tmp/waas-smoke-fe.tmp 2>&1; then
   pass "Flow engine /admin/health reachable via docker exec"
 else
   fail "Flow engine /admin/health reachable via docker exec" \
@@ -174,8 +175,10 @@ fi
 # Check 5: Redis responsiveness (PING via docker exec)
 # ---------------------------------------------------------------------------
 echo -n "  Checking Redis... "
+# The default user requires auth (+ping only); password comes from the
+# container's own environment, never from the host.
 if docker exec "${REDIS_CONTAINER}" \
-    redis-cli ping 2>/dev/null | grep -q "PONG"; then
+    sh -c 'redis-cli -a "$REDIS_DEFAULT_PASSWORD" --no-auth-warning ping' 2>/dev/null | grep -q "PONG"; then
   pass "Redis responds to PING"
 else
   fail "Redis responds to PING" "Container: ${REDIS_CONTAINER}"
