@@ -71,7 +71,7 @@ class FlowNode:
     id: str
     node_type: str
     config: dict[str, Any]
-    transitions: list[dict[str, Any]]  # [{condition, next_node}]
+    transitions: list[dict[str, Any]]  # [{condition: {type, ...}, next}] — next references node_key
 
 
 @dataclass
