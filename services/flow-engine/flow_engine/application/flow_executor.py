@@ -174,12 +174,28 @@ class FlowExecutor:
         session.state = "LLM_FALLBACK"
         rag_context: str | None = None
         results = self._vector_store.query(message.tenant_id, message.text, top_k=5)
-        if results and results[0][1] >= 0.5:
+        # 0.35: cosine similarity from MiniLM on multi-topic chunks rarely
+        # exceeds ~0.5 even for clear hits; gate only filters true noise.
+        top_score = results[0][1] if results else 0.0
+        if results and top_score >= 0.35:
             rag_context = "\n\n".join(text for text, _ in results)
+        logger.info(
+            "RAG fallback retrieval",
+            extra={
+                "tenant_id": message.tenant_id,
+                "top_score": round(top_score, 4),
+                "context_used": rag_context is not None,
+            },
+        )
 
         try:
             reply_text, tokens = self._llm.generate(
-                system_prompt="You are a helpful WhatsApp assistant. Answer concisely.",
+                system_prompt=(
+                    "You are this business's WhatsApp assistant. Answer concisely. "
+                    "When knowledge-base context is provided, base your answer "
+                    "strictly on it. If the context does not cover the question, "
+                    "say you don't have that information instead of guessing."
+                ),
                 history=session.history[-_MAX_HISTORY:],
                 user_message=message.text,
                 rag_context=rag_context,
