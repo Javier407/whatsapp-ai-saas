@@ -10,10 +10,8 @@ export class ActivateFlowUseCase {
   ) {}
 
   async execute(tenantId: string, flowId: string): Promise<Flow> {
-    const existing = await this.flowRepo.findById(flowId);
-    if (!existing || existing.tenantId !== tenantId) {
-      throw new NotFoundError('Flow', flowId);
-    }
+    const existing = await this.flowRepo.findByIdForTenant(tenantId, flowId);
+    if (!existing) throw new NotFoundError('Flow', flowId);
 
     // Deactivate other flows with overlapping triggers before activating this one
     await this.flowRepo.deactivateByTrigger(tenantId, flowId);

@@ -1,8 +1,14 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    // Must stay ESM. package.json is "type": "module" and jest.config.js runs
+    // ts-jest with useESM: true. Emitting CommonJS here makes ts-jest produce
+    // `exports.x = ...`, which throws "exports is not defined" under the ESM VM.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // Required by ts-jest when module is Node16/18/Next: it transpiles each file
+    // in isolation, so the hybrid module kind is only supported with this on.
+    "isolatedModules": true,
     "rootDir": ".",
     "outDir": "dist-test"
   },

@@ -18,10 +18,12 @@ MIGRATIONS_DIR="${SCRIPT_DIR}/migrations"
 
 # Load .env if it exists
 if [ -f "${ENV_FILE}" ]; then
-  # Export key=value lines, skip comments and blanks
+  # Export key=value lines, skip comments and blanks.
+  # The sed strips a UTF-8 BOM if present — Windows editors add one and it
+  # breaks both the comment filter and the first sourced line.
   set -o allexport
   # shellcheck source=/dev/null
-  source <(grep -v '^\s*#' "${ENV_FILE}" | grep -v '^\s*$')
+  source <(sed '1s/^\xEF\xBB\xBF//' "${ENV_FILE}" | grep -v '^\s*#' | grep -v '^\s*$')
   set +o allexport
 fi
 
@@ -43,16 +45,33 @@ echo "Connecting to ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
 echo "Running migrations from ${MIGRATIONS_DIR}/"
 echo ""
 
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+
+# Prefer host psql; fall back to psql inside the postgres container so the
+# script also works on machines without a local PostgreSQL client (Windows).
+if command -v psql >/dev/null 2>&1; then
+  run_migration() {
+    psql \
+      --host="${PGHOST}" \
+      --port="${PGPORT}" \
+      --username="${PGUSER}" \
+      --dbname="${PGDATABASE}" \
+      --variable=ON_ERROR_STOP=1 \
+      --file="$1"
+  }
+else
+  echo "psql not found on host — using psql inside the postgres container"
+  run_migration() {
+    docker compose -f "${COMPOSE_FILE}" exec -T postgres \
+      psql --username="${PGUSER}" --dbname="${PGDATABASE}" \
+      --variable=ON_ERROR_STOP=1 < "$1"
+  }
+fi
+
 for migration in "${MIGRATIONS_DIR}"/*.sql; do
   filename="$(basename "${migration}")"
   echo "--> ${filename}"
-  psql \
-    --host="${PGHOST}" \
-    --port="${PGPORT}" \
-    --username="${PGUSER}" \
-    --dbname="${PGDATABASE}" \
-    --variable=ON_ERROR_STOP=1 \
-    --file="${migration}"
+  run_migration "${migration}"
   echo "    OK"
 done
 

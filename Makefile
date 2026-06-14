@@ -45,8 +45,8 @@ build: ## Build all service images
 ## Selective bring-up
 ##
 
-infra-up: ## Start infrastructure only (postgres, redis, chromadb, minio, caddy)
-	$(COMPOSE) up -d postgres redis chromadb minio caddy
+infra-up: ## Start infrastructure only (postgres, redis, chromadb, minio + bucket init, caddy)
+	$(COMPOSE) up -d postgres redis chromadb minio minio-init caddy
 
 app-up: ## Start application services (gateway, tenant-api, flow-engine, rag-indexer)
 	$(COMPOSE) up -d gateway tenant-api flow-engine rag-indexer
@@ -57,7 +57,7 @@ wait-infra: ## Wait until postgres and redis are healthy
 		sleep 2; \
 	done
 	@echo "Waiting for redis..."
-	@until $(COMPOSE) exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; do \
+	@until $(COMPOSE) exec -T redis sh -c 'redis-cli -a "$$REDIS_DEFAULT_PASSWORD" ping' 2>/dev/null | grep -q PONG; do \
 		sleep 2; \
 	done
 	@echo "Infrastructure is healthy."

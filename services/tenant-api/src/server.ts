@@ -73,10 +73,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   const kbRepo = new PrismaKbDocumentRepo(prisma);
   const convLogRepo = new PrismaConvLogRepo(prisma);
 
+  // S3_ENDPOINT arrives as a full URL (http://minio:9000) but the minio
+  // client wants hostname, port, and SSL flag as separate fields
+  const s3Url = new URL(config.S3_ENDPOINT);
   const storage = new MinioStorageAdapter({
-    endPoint: config.S3_ENDPOINT,
-    port: config.S3_PORT,
-    useSSL: config.S3_USE_SSL,
+    endPoint: s3Url.hostname,
+    port: s3Url.port ? Number(s3Url.port) : config.S3_PORT,
+    useSSL: s3Url.protocol === 'https:',
     accessKey: config.S3_ACCESS_KEY,
     secretKey: config.S3_SECRET_KEY,
     bucket: config.S3_BUCKET_KB,
@@ -149,6 +152,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         uploadDocumentUseCase,
         listDocumentsUseCase,
         deleteDocumentUseCase,
+        maxFileSizeBytes: config.KB_MAX_FILE_SIZE_MB * 1024 * 1024,
       });
 
       await api.register(conversationsRoutes, {

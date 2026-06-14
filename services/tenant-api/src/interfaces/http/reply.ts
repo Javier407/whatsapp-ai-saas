@@ -24,70 +24,34 @@ export function ok<T>(reply: FastifyReply, data: T, status = 200): void {
   } satisfies ApiResponse<T>);
 }
 
+// Maps each domain error to its HTTP status. Ordered most-specific first;
+// the bare DomainError catch-all must stay last so subclasses match before it.
+const ERROR_STATUS_MAP: ReadonlyArray<[new (...args: never[]) => DomainError, number]> = [
+  [NotFoundError, 404],
+  [ConflictError, 409],
+  [ValidationError, 422],
+  [UnauthorizedError, 401],
+  [ForbiddenError, 403],
+  [QuotaExceededError, 429],
+  [DomainError, 400],
+];
+
 export function sendDomainError(reply: FastifyReply, err: unknown): void {
   const requestId = randomUUID();
 
-  if (err instanceof NotFoundError) {
-    void reply.status(404).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof ConflictError) {
-    void reply.status(409).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof ValidationError) {
-    void reply.status(422).send({
-      data: null,
-      error: { code: err.code, message: err.message, details: err.details },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof UnauthorizedError) {
-    void reply.status(401).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof ForbiddenError) {
-    void reply.status(403).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof QuotaExceededError) {
-    void reply.status(429).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
-  }
-
-  if (err instanceof DomainError) {
-    void reply.status(400).send({
-      data: null,
-      error: { code: err.code, message: err.message },
-      meta: { request_id: requestId },
-    });
-    return;
+  for (const [ErrorClass, status] of ERROR_STATUS_MAP) {
+    if (err instanceof ErrorClass) {
+      void reply.status(status).send({
+        data: null,
+        error: {
+          code: err.code,
+          message: err.message,
+          ...(err instanceof ValidationError && { details: err.details }),
+        },
+        meta: { request_id: requestId },
+      });
+      return;
+    }
   }
 
   // Unknown error — 500

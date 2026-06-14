@@ -64,10 +64,10 @@ class PostgresFlowRepo(IFlowRepo):
                 # RLS context
                 cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
 
-                # Load flows
+                # Load flows (columns per infra/migrations/002_create_flows.sql)
                 cur.execute(
                     """
-                    SELECT id, name, trigger_config
+                    SELECT id, name, trigger, entry_node
                       FROM flows
                      WHERE tenant_id = %s
                        AND is_active = true
@@ -78,13 +78,13 @@ class PostgresFlowRepo(IFlowRepo):
 
                 for row in flow_rows:
                     flow_id: str = str(row["id"])
-                    trigger: dict[str, Any] = row["trigger_config"] or {}
+                    trigger: dict[str, Any] = row["trigger"] or {}
                     flows_map[flow_id] = Flow(
                         id=flow_id,
                         tenant_id=tenant_id,
                         name=row["name"],
                         trigger=trigger,
-                        entry_node="",  # resolved below
+                        entry_node=row["entry_node"],
                         nodes={},
                         is_active=True,
                     )
@@ -95,9 +95,12 @@ class PostgresFlowRepo(IFlowRepo):
                 # Load flow_nodes for all active flows
                 flow_ids = list(flows_map.keys())
                 placeholders = ",".join(["%s"] * len(flow_ids))
+                # NOTE: `meta` (UI-only node positions, migration 006) is intentionally
+                # excluded from this SELECT — it is presentation state and must never
+                # influence runtime flow execution.
                 cur.execute(
                     f"""
-                    SELECT id, flow_id, node_type, config, transitions, is_entry
+                    SELECT flow_id, node_key, type, config, transitions
                       FROM flow_nodes
                      WHERE flow_id IN ({placeholders})
                     """,
@@ -107,20 +110,18 @@ class PostgresFlowRepo(IFlowRepo):
 
         for row in node_rows:
             flow_id = str(row["flow_id"])
-            node_id = str(row["id"])
+            node_key = row["node_key"]
             flow = flows_map.get(flow_id)
             if flow is None:
                 continue
 
-            node = FlowNode(
-                id=node_id,
-                node_type=row["node_type"],
+            # Nodes are keyed by node_key: flows.entry_node and every
+            # transition `next` reference node_key, never the row UUID.
+            flow.nodes[node_key] = FlowNode(
+                id=node_key,
+                node_type=row["type"],
                 config=row["config"] or {},
                 transitions=row["transitions"] or [],
             )
-            flow.nodes[node_id] = node
-
-            if row["is_entry"]:
-                flow.entry_node = node_id
 
         return list(flows_map.values())

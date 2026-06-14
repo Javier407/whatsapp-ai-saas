@@ -204,7 +204,7 @@ class IndexingConsumer:
                     self.GROUP_NAME,
                     self.CONSUMER_NAME,
                     self.XCLAIM_IDLE_MS,
-                    start="0-0",
+                    start_id="0-0",
                     count=10,
                 )
                 # result = (next_start_id, [(id, fields), ...], [deleted_ids])

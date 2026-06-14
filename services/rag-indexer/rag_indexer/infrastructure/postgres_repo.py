@@ -56,8 +56,7 @@ class PostgresStatusRepo(IStatusRepo):
                        SET status = 'indexed',
                            chunk_count = %s,
                            indexed_at = NOW(),
-                           error_message = NULL,
-                           updated_at = NOW()
+                           error_message = NULL
                      WHERE id = %s
                        AND tenant_id = %s
                     """,
@@ -80,8 +79,7 @@ class PostgresStatusRepo(IStatusRepo):
                     """
                     UPDATE knowledge_base_documents
                        SET status = 'failed',
-                           error_message = %s,
-                           updated_at = NOW()
+                           error_message = %s
                      WHERE id = %s
                        AND tenant_id = %s
                     """,
@@ -100,7 +98,7 @@ class PostgresStatusRepo(IStatusRepo):
                 cur.execute(
                     """
                     UPDATE knowledge_base_documents
-                       SET status = %s, updated_at = NOW()
+                       SET status = %s
                      WHERE id = %s
                        AND tenant_id = %s
                     """,

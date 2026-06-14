@@ -13,12 +13,13 @@ from typing import Any
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
 from flow_engine.application.trigger_matcher import match_trigger
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
-from flow_engine.domain.models import Flow, FlowNode, InboundMessage, Session
+from flow_engine.domain.models import Flow, InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSendPort, IVectorStore
 
 logger = logging.getLogger(__name__)
 
 _MAX_ITERATIONS = 20
+_MAX_HISTORY = 10
 
 
 class FlowExecutor:
@@ -42,10 +43,8 @@ class FlowExecutor:
         """Process one inbound message, mutating *session* in place."""
         now = _now_iso()
 
-        # Append user turn to history (cap at 10)
-        session.history.append({"role": "user", "content": message.text, "ts": now})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        # Append user turn to history (capped at _MAX_HISTORY)
+        _append_to_history(session, {"role": "user", "content": message.text, "ts": now})
 
         deps = ExecutorDeps(
             meta_send=self._meta_send,
@@ -175,13 +174,29 @@ class FlowExecutor:
         session.state = "LLM_FALLBACK"
         rag_context: str | None = None
         results = self._vector_store.query(message.tenant_id, message.text, top_k=5)
-        if results and results[0][1] >= 0.5:
+        # 0.35: cosine similarity from MiniLM on multi-topic chunks rarely
+        # exceeds ~0.5 even for clear hits; gate only filters true noise.
+        top_score = results[0][1] if results else 0.0
+        if results and top_score >= 0.35:
             rag_context = "\n\n".join(text for text, _ in results)
+        logger.info(
+            "RAG fallback retrieval",
+            extra={
+                "tenant_id": message.tenant_id,
+                "top_score": round(top_score, 4),
+                "context_used": rag_context is not None,
+            },
+        )
 
         try:
             reply_text, tokens = self._llm.generate(
-                system_prompt="You are a helpful WhatsApp assistant. Answer concisely.",
-                history=session.history[-10:],
+                system_prompt=(
+                    "You are this business's WhatsApp assistant. Answer concisely. "
+                    "When knowledge-base context is provided, base your answer "
+                    "strictly on it. If the context does not cover the question, "
+                    "say you don't have that information instead of guessing."
+                ),
+                history=session.history[-_MAX_HISTORY:],
                 user_message=message.text,
                 rag_context=rag_context,
                 max_tokens=500,
@@ -201,9 +216,7 @@ class FlowExecutor:
             access_token=message.access_token,
         )
 
-        session.history.append({"role": "assistant", "content": reply_text, "ts": _now_iso()})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        _append_to_history(session, {"role": "assistant", "content": reply_text, "ts": _now_iso()})
 
         session.state = "IDLE"
 
@@ -215,16 +228,21 @@ class FlowExecutor:
     ) -> None:
         """Append assistant reply to history."""
         if result.reply:
-            session.history.append(
-                {"role": "assistant", "content": result.reply, "ts": _now_iso()}
+            _append_to_history(
+                session, {"role": "assistant", "content": result.reply, "ts": _now_iso()}
             )
-            if len(session.history) > 10:
-                session.history = session.history[-10:]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _append_to_history(session: Session, turn: dict[str, Any]) -> None:
+    """Append a turn and keep only the last _MAX_HISTORY entries."""
+    session.history.append(turn)
+    if len(session.history) > _MAX_HISTORY:
+        session.history = session.history[-_MAX_HISTORY:]
 
 
 def _find_flow(flows: list[Flow], flow_id: str | None) -> Flow | None:

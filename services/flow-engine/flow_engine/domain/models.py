@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 
@@ -71,7 +71,7 @@ class FlowNode:
     id: str
     node_type: str
     config: dict[str, Any]
-    transitions: list[dict[str, Any]]  # [{condition, next_node}]
+    transitions: list[dict[str, Any]]  # [{condition: {type, ...}, next}] — next references node_key
 
 
 @dataclass
@@ -109,8 +109,6 @@ class InboundMessage:
 
     @classmethod
     def from_stream_fields(cls, fields: dict[str, str]) -> "InboundMessage":
-        import json as _json
-        payload = _json.loads(fields.get("payload", "{}"))
         return cls(
             message_id=fields["message_id"],
             tenant_id=fields["tenant_id"],

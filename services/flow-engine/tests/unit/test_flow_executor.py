@@ -96,7 +96,7 @@ def _make_simple_flow(
         id="start",
         node_type="message",
         config={"content": "Hi!"},
-        transitions=[{"condition": "default", "next_node": "end"}],
+        transitions=[{"condition": {"type": "always"}, "next": "end"}],
     )
     return Flow(
         id=flow_id,
@@ -173,17 +173,20 @@ class TestIdleToFlowMatch:
 
 
 class TestInFlowContinuation:
-    def test_in_flow_advances_to_next_node(self) -> None:
+    def test_in_flow_advances_and_persists_slot(self) -> None:
+        # Collect "name", then advance to a second collect that waits for input.
+        # The flow never reaches an end node, so the captured slot survives —
+        # an end node would reset the session (slots cleared by design).
         collect_node = FlowNode(
             id="collect",
             node_type="collect_input",
             config={"slot": "name", "prompt": "Name?"},
-            transitions=[{"condition": "default", "next_node": "end"}],
+            transitions=[{"condition": {"type": "always"}, "next": "ask_email"}],
         )
-        end_node = FlowNode(
-            id="end",
-            node_type="end",
-            config={"content": "Done!"},
+        email_node = FlowNode(
+            id="ask_email",
+            node_type="collect_input",
+            config={"slot": "email", "prompt": "Email?"},
             transitions=[],
         )
         flow = Flow(
@@ -192,14 +195,15 @@ class TestInFlowContinuation:
             name="Collect Flow",
             trigger={"type": "always"},
             entry_node="collect",
-            nodes={"collect": collect_node, "end": end_node},
+            nodes={"collect": collect_node, "ask_email": email_node},
             is_active=True,
         )
         executor, _, _ = _make_executor(flows=[flow])
         session = _session(state="IN_FLOW", flow_id="f1", current_node="collect")
         executor.execute(_message("Alice"), session)
-        assert session.slots.get("name") == "Alice"
-        assert session.state == "IDLE"  # end node resets
+        assert session.slots.get("name") == "Alice"  # slot persisted into the session
+        assert session.current_node == "ask_email"    # advanced to the next node
+        assert session.state == "IN_FLOW"              # waiting for the email reply
 
 
 class TestEndNodeResetsState:
@@ -222,7 +226,7 @@ class TestMaxIterationGuard:
             id="loop",
             node_type="condition",
             config={},
-            transitions=[{"condition": "default", "next_node": "loop"}],
+            transitions=[{"condition": {"type": "always"}, "next": "loop"}],
         )
         flow = Flow(
             id="f1",

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WhatsApp AI SaaS — Presentación del proyecto</title>
+<style>
+  :root {
+    --green-900: #075E54;
+    --green-700: #128C7E;
+    --green-500: #25D366;
+    --green-050: #e7f7ee;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --red: #dc2626;
+    --red-bg: #fee2e2;
+    --blue: #2563eb;
+    --blue-bg: #dbeafe;
+    --green-bg: #dcfce7;
+    --green-txt: #15803d;
+    --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 8px 24px rgba(15, 23, 42, .05);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+  }
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto; padding: 12px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .brand .dot { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--green-500), var(--green-700)); display: grid; place-items: center; color: #fff; font-size: 15px; }
+  nav.links { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+  nav.links a { color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; padding: 6px 10px; border-radius: 7px; }
+  nav.links a:hover { color: var(--green-700); background: var(--green-050); }
+  main { max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+  section { padding: 56px 0 8px; border-top: 1px solid transparent; }
+  section + section { border-top: 1px solid var(--line); }
+  h1, h2, h3 { line-height: 1.25; letter-spacing: -.01em; }
+  h2.section-title { font-size: 28px; margin: 0 0 6px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700; color: var(--green-700); margin: 0 0 8px; }
+  .lead { color: var(--muted); font-size: 17px; max-width: 70ch; }
+
+  /* Hero */
+  .hero { padding: 64px 0 40px; }
+  .hero h1 { font-size: 46px; margin: 0 0 14px; }
+  .hero h1 .accent { background: linear-gradient(120deg, var(--green-700), var(--green-500)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { font-size: 19px; color: var(--muted); max-width: 60ch; }
+  .pillrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+  .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--ink); box-shadow: var(--shadow); }
+  .pill b { color: var(--green-700); }
+
+  /* Cards & grids */
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: var(--shadow); }
+  .card h3 { margin: 0 0 6px; font-size: 16.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .card .role { font-size: 12.5px; font-weight: 700; color: var(--green-700); text-transform: uppercase; letter-spacing: .06em; }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .b-done { background: var(--green-bg); color: var(--green-txt); }
+  .b-partial { background: var(--amber-bg); color: var(--amber); }
+  .b-todo { background: var(--red-bg); color: var(--red); }
+  .b-plan { background: var(--blue-bg); color: var(--blue); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin: 14px 0 22px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 14px; box-shadow: var(--shadow); }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f1f5f9; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td code, .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; background: #f1f5f9; padding: 1px 6px; border-radius: 5px; }
+  .id-cell { font-weight: 700; color: var(--green-700); white-space: nowrap; }
+
+  /* Architecture diagram */
+  .arch { background: var(--green-900); color: #d1fae5; border-radius: 14px; padding: 22px; font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.7; overflow-x: auto; box-shadow: var(--shadow); }
+  .arch .svc { color: #6ee7b7; font-weight: 700; }
+  .arch .infra { color: #fcd34d; }
+
+  /* Flow / roadmap timeline */
+  .timeline { display: grid; gap: 14px; }
+  .phase { display: grid; grid-template-columns: 130px 1fr; gap: 16px; align-items: start; }
+  .phase .when { font-weight: 800; color: var(--green-700); font-size: 14px; padding-top: 2px; }
+  .phase .what { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--green-500); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .phase .what h4 { margin: 0 0 6px; font-size: 15px; }
+  .phase .what ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+
+  .callout { background: var(--green-050); border: 1px solid #b6e7cd; border-radius: 12px; padding: 16px 18px; font-size: 14.5px; }
+  .callout strong { color: var(--green-900); }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 7px 0; border-bottom: 1px dashed var(--line); display: flex; align-items: center; gap: 10px; font-size: 14.5px; }
+  ul.clean li:last-child { border-bottom: none; }
+
+  footer { max-width: 1100px; margin: 0 auto; padding: 30px 24px 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+
+  @media (max-width: 800px) {
+    .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+    .phase { grid-template-columns: 1fr; }
+    nav.links { display: none; }
+    .hero h1 { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <div class="brand"><span class="dot">✦</span> WhatsApp AI SaaS</div>
+    <nav class="links">
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#stack">Stack</a>
+      <a href="#datos">Datos</a>
+      <a href="#contratos">Contratos</a>
+      <a href="#ejecucion">Ejecución</a>
+      <a href="#seguridad">Seguridad</a>
+      <a href="#despliegue">Despliegue</a>
+      <a href="#estado">Estado</a>
+      <a href="#gaps">Qué falta</a>
+      <a href="#rf">RF</a>
+      <a href="#rnf">RNF</a>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero" id="top">
+    <p class="eyebrow">Plataforma SaaS multi-tenant</p>
+    <h1>Convertí tu WhatsApp Business en un <span class="accent">bot con IA</span>, sin escribir una línea de código.</h1>
+    <p>Un negocio conecta su cuenta de WhatsApp, define flujos conversacionales y carga su base de conocimiento. La plataforma responde a sus clientes automáticamente: por flujos guiados o, cuando no hay flujo, con una respuesta RAG + LLM sobre los documentos del propio negocio.</p>
+    <div class="pillrow">
+      <span class="pill"><b>5</b> microservicios</span>
+      <span class="pill"><b>8</b> tipos de nodo</span>
+      <span class="pill"><b>RLS</b> aislamiento por tenant</span>
+      <span class="pill"><b>Docker-first</b></span>
+      <span class="pill"><b>7</b> ADRs</span>
+    </div>
+  </section>
+
+  <!-- RESUMEN -->
+  <section id="resumen">
+    <p class="eyebrow">Visión</p>
+    <h2 class="section-title">Hacia dónde va el proyecto</h2>
+    <p class="lead">El núcleo conversacional ya funciona de punta a punta. El camino ahora es pasar de un <strong>MVP en modo sandbox de un solo número</strong> a una plataforma <strong>self-serve, multi-cliente y monetizable</strong>: que cualquier negocio se registre solo, conecte su WhatsApp, arme flujos de forma visual y pague por su plan.</p>
+    <div class="grid cols-3" style="margin-top:22px">
+      <div class="card">
+        <div class="role">Hoy · MVP</div>
+        <h3>Núcleo funcional</h3>
+        <p>Webhooks firmados, motor de flujos con 8 nodos, RAG+LLM, multi-tenancy con RLS y un dashboard operativo. Single-WABA sandbox.</p>
+      </div>
+      <div class="card">
+        <div class="role">Próximo</div>
+        <h3>Autonomía del tenant</h3>
+        <p>Editor visual de flujos (drag-and-drop) y onboarding self-serve para que el negocio no dependa de soporte técnico.</p>
+      </div>
+      <div class="card">
+        <div class="role">Visión</div>
+        <h3>Producto comercial</h3>
+        <p>Multi-WABA real (Meta Tech Provider), facturación por planes, campañas proactivas y analítica.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARQUITECTURA -->
+  <section id="arquitectura">
+    <p class="eyebrow">Arquitectura</p>
+    <h2 class="section-title">5 servicios desacoplados por Redis Streams</h2>
+    <p class="lead">El gateway nunca llama a flow-engine por HTTP: todo el trabajo asíncrono viaja por Redis Streams. Cada servicio sigue arquitectura hexagonal (<code class="mono">domain → application → infrastructure → interfaces</code>).</p>
+    <div class="arch" style="margin-top:18px">
+Meta Cloud API (WhatsApp)<br>
+&nbsp;&nbsp;│ webhook firmado (HMAC-SHA256)<br>
+&nbsp;&nbsp;▼<br>
+<span class="svc">[ gateway ]</span> Node + Fastify ──┐ resuelve tenant por phone_number_id<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ Redis Stream  flow-engine:{tenant}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+<span class="svc">[ flow-engine ]</span> Python · FastAPI · LangChain (×2 réplicas)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;├─ ejecuta el grafo de flujo · sesiones en Redis<br>
+&nbsp;&nbsp;&nbsp;&nbsp;├─ fallback RAG + LLM si ningún flujo matchea<br>
+&nbsp;&nbsp;&nbsp;&nbsp;└─ descifra el token (AES-GCM) y llama Meta Send API<br>
+<br>
+Dashboard (React) ─► <span class="svc">[ tenant-api ]</span> Node · Fastify · Prisma<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ Redis Stream  indexing:{tenant}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+<span class="svc">[ rag-indexer ]</span> Python worker ─► chunk + embed ─► ChromaDB<br>
+<br>
+Infra: <span class="infra">PostgreSQL 16 (RLS)</span> · <span class="infra">Redis 7</span> · <span class="infra">ChromaDB</span> · <span class="infra">MinIO</span> · <span class="infra">Caddy</span> · <span class="infra">Loki/Grafana</span>
+    </div>
+    <div class="grid cols-4" style="margin-top:18px">
+      <div class="card"><div class="role">gateway</div><h3>Recepción</h3><p>Verifica HMAC, resuelve el tenant y encola en Redis. Cero lógica de negocio.</p></div>
+      <div class="card"><div class="role">tenant-api</div><h3>API REST</h3><p>Auth JWT, flujos, base de conocimiento, conversaciones, dry-run. Prisma + RLS.</p></div>
+      <div class="card"><div class="role">flow-engine</div><h3>Cerebro</h3><p>Ejecuta flujos, RAG y LLM. Resuelve y descifra el token de WhatsApp.</p></div>
+      <div class="card"><div class="role">rag-indexer</div><h3>Indexado</h3><p>Carga, trocea y vectoriza documentos a ChromaDB con embeddings locales.</p></div>
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section id="stack">
+    <p class="eyebrow">Stack técnico</p>
+    <h2 class="section-title">Tecnologías y por qué</h2>
+    <table>
+      <thead><tr><th style="width:180px">Tecnología</th><th style="width:90px">Versión</th><th>Rol y justificación</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">Node.js + Fastify</td><td>20 · 4.x</td><td>Servicios I/O-bound (webhook, REST). Fastify ~2–3× Express, validación JSON Schema y logging pino integrados.</td></tr>
+        <tr><td class="id-cell">Prisma</td><td>5.x</td><td>Acceso tipado a Postgres. Genera el cliente desde el schema; las migraciones son SQL plano (no Prisma Migrate) para controlar RLS.</td></tr>
+        <tr><td class="id-cell">Python + FastAPI</td><td>3.12 · 0.111+</td><td>Ecosistema IA/ML. FastAPI expone la API admin (dry-run) con OpenAPI; Pydantic valida.</td></tr>
+        <tr><td class="id-cell">LangChain</td><td>0.3.x</td><td>Abstracción de proveedor LLM, recorte de historial, composición de retrievers.</td></tr>
+        <tr><td class="id-cell">PostgreSQL</td><td>16</td><td>Row Level Security para aislamiento multi-tenant; JSONB para grafos de flujo.</td></tr>
+        <tr><td class="id-cell">Redis</td><td>7</td><td>Streams (cola asíncrona) + sesiones (Hashes) + cache de lookup de tenant. AOF para durabilidad; ACL por servicio.</td></tr>
+        <tr><td class="id-cell">ChromaDB</td><td>0.5</td><td>Colección de vectores por tenant (<code class="mono">tenant_{id}</code>); HTTP simple, sin migraciones de esquema.</td></tr>
+        <tr><td class="id-cell">sentence-transformers</td><td>2.7+</td><td>Embeddings locales en CPU (all-MiniLM-L6-v2): costo marginal cero por documento.</td></tr>
+        <tr><td class="id-cell">MinIO · Caddy</td><td>— · 2</td><td>Almacenamiento S3-compatible para documentos; Caddy hace HTTPS automático (Let's Encrypt) y reverse-proxy.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- MODELO DE DATOS -->
+  <section id="datos">
+    <p class="eyebrow">Modelo de datos</p>
+    <h2 class="section-title">Esquema PostgreSQL</h2>
+    <p class="lead">7 tablas. Todas las tablas con datos de tenant tienen RLS forzado. Las migraciones son SQL versionado (<code class="mono">001</code>–<code class="mono">005</code>), no Prisma Migrate.</p>
+    <table>
+      <thead><tr><th style="width:200px">Tabla</th><th>Columnas clave</th><th style="width:120px">RLS</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">tenants</td><td><code class="mono">id, slug ᵁ, waba_id, phone_number_id ᵁ, access_token (cifrado), plan {free·pro·enterprise}, status {active·suspended·offboarded}</code></td><td>raíz</td></tr>
+        <tr><td class="id-cell">users</td><td><code class="mono">id, tenant_id ᶠ, email, password_hash (argon2id), role</code></td><td><span class="badge b-done">✅ forzado</span></td></tr>
+        <tr><td class="id-cell">flows</td><td><code class="mono">id, tenant_id ᶠ, name, trigger JSONB, entry_node, is_active, version · UNIQUE(tenant_id,name,version)</code></td><td><span class="badge b-done">✅ forzado</span></td></tr>
+        <tr><td class="id-cell">flow_nodes</td><td><code class="mono">id, flow_id ᶠ, tenant_id ᶠ, node_key, type CHECK(8 tipos), config JSONB, transitions JSONB · UNIQUE(flow_id,node_key)</code></td><td><span class="badge b-done">✅ forzado</span></td></tr>
+        <tr><td class="id-cell">knowledge_base_documents</td><td><code class="mono">id, tenant_id ᶠ, source_type {text·pdf·faq_json·markdown}, storage_uri, status {pending·indexing·indexed·failed}, chunk_count</code></td><td><span class="badge b-done">✅ forzado</span></td></tr>
+        <tr><td class="id-cell">conversation_logs</td><td><code class="mono">id BIGSERIAL, tenant_id ᶠ, wa_id, direction {in·out}, content JSONB, flow_id, node_key, llm_tokens, latency_ms</code></td><td><span class="badge b-done">✅ forzado</span></td></tr>
+        <tr><td class="id-cell">worker_heartbeats</td><td><code class="mono">worker_name PK, last_seen_at, metadata JSONB</code></td><td>operacional</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:8px">ᵁ = UNIQUE · ᶠ = foreign key a <code class="mono">tenants(id)</code> con <code class="mono">ON DELETE CASCADE</code></p>
+  </section>
+
+  <!-- CONTRATOS -->
+  <section id="contratos">
+    <p class="eyebrow">Contratos inter-servicio</p>
+    <h2 class="section-title">Dos Redis Streams, una forma acordada</h2>
+    <p class="lead">Cada entrada del stream lleva el envelope JSON en su campo <code class="mono">data</code>, validado por JSON Schema en <code class="mono">infra/contracts/</code>. El gateway nunca llama a flow-engine por HTTP.</p>
+    <div class="grid cols-2" style="margin-top:18px">
+      <div>
+        <h3 style="margin-bottom:8px">📥 <code class="mono">flow-engine:{tenant_id}</code></h3>
+        <div class="arch">
+<span class="svc">FlowEngineMessage</span> (gateway → flow-engine)<br>
+{<br>
+&nbsp;&nbsp;message_id:&nbsp; uuid  <span style="color:#fcd34d">// idempotencia</span><br>
+&nbsp;&nbsp;received_at:&nbsp;date-time<br>
+&nbsp;&nbsp;tenant_id:&nbsp;&nbsp; uuid<br>
+&nbsp;&nbsp;phone_number_id: string<br>
+&nbsp;&nbsp;raw: { ...value de Meta Cloud API }<br>
+}<br>
+<span style="color:#fcd34d">// el access_token NO viaja por el stream;</span><br>
+<span style="color:#fcd34d">// se resuelve y descifra desde Postgres</span>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:8px">📚 <code class="mono">indexing:{tenant_id}</code></h3>
+        <div class="arch">
+<span class="svc">IndexingJob</span> (tenant-api → rag-indexer)<br>
+{<br>
+&nbsp;&nbsp;job_id:&nbsp;&nbsp;&nbsp;&nbsp; uuid<br>
+&nbsp;&nbsp;tenant_id:&nbsp;&nbsp;uuid<br>
+&nbsp;&nbsp;document_id: uuid<br>
+&nbsp;&nbsp;storage_uri: s3://kb-documents/...<br>
+&nbsp;&nbsp;source_type: text|pdf|faq_json|markdown<br>
+&nbsp;&nbsp;embedder:&nbsp;&nbsp;&nbsp;sbert|openai<br>
+&nbsp;&nbsp;enqueued_at: date-time<br>
+}
+        </div>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:16px"><strong>Política de ACK:</strong> mensajes malformados hacen ACK (evitan reencolado infinito); fallos transitorios de dependencias NO hacen ACK. La idempotencia se garantiza con <code class="mono">message_id</code>.</div>
+  </section>
+
+  <!-- EJECUCIÓN -->
+  <section id="ejecucion">
+    <p class="eyebrow">Modelo de ejecución</p>
+    <h2 class="section-title">De un mensaje a una respuesta</h2>
+
+    <h3>Secuencia extremo a extremo</h3>
+    <div class="arch" style="margin-top:8px">
+<span class="svc">1.</span> Meta → POST /webhook → <span class="svc">gateway</span><br>
+<span class="svc">2.</span> gateway: verifica HMAC-SHA256, resuelve tenant por phone_number_id (cache Redis),<br>
+&nbsp;&nbsp;&nbsp;XADD a flow-engine:{tenant_id}<br>
+<span class="svc">3.</span> flow-engine (consumer): XREADGROUP → parsea envelope → extrae sender/text de raw.messages[0]<br>
+&nbsp;&nbsp;&nbsp;→ carga/crea Session (Redis Hash) → resuelve+descifra access_token (AES-GCM) desde Postgres<br>
+<span class="svc">4.</span> FlowExecutor: matchea trigger → ejecuta el grafo  |  si no matchea → fallback RAG+LLM<br>
+&nbsp;&nbsp;&nbsp;avanza nodos hasta wait/end (máx 20 iteraciones → MaxIterationsError)<br>
+<span class="svc">5.</span> Meta Send API (token descifrado) → history capado a 10 → persiste Session → log → XACK
+    </div>
+
+    <div class="grid cols-2" style="margin-top:22px">
+      <div>
+        <h3>Máquina de estados de sesión</h3>
+        <div class="arch">
+Redis Hash: <span class="infra">session:{tenant_id}:{wa_id}</span><br><br>
+&nbsp;&nbsp;<span class="svc">IDLE</span> ──match trigger──► <span class="svc">IN_FLOW</span><br>
+&nbsp;&nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+&nbsp;&nbsp;&nbsp;│ sin match&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fin/error<br>
+&nbsp;&nbsp;&nbsp;▼&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+<span class="svc">LLM_FALLBACK</span>&nbsp;&nbsp;<span class="svc">ERROR</span> / <span class="svc">IDLE</span><br><br>
+campos: state · flow_id · current_node<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;slots · history[≤10] · retry_count
+        </div>
+      </div>
+      <div>
+        <h3>Disparadores y guardas</h3>
+        <ul class="clean">
+          <li><span class="badge b-done">trigger</span> <code class="mono">keyword_match · regex_match · always</code></li>
+          <li><span class="badge b-done">tope</span> <code class="mono">_MAX_ITERATIONS = 20</code> por mensaje</li>
+          <li><span class="badge b-done">historial</span> <code class="mono">_MAX_HISTORY = 10</code> turnos</li>
+          <li><span class="badge b-done">errores</span> <code class="mono">MaxIterationsError · NodeExecutionError</code> → estado ERROR</li>
+          <li><span class="badge b-done">RAG</span> fallback con <code class="mono">top_k</code> + umbral de confianza</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-top:24px">Los 8 tipos de nodo</h3>
+    <table>
+      <thead><tr><th style="width:150px">Tipo</th><th>Acción</th><th>Config principal</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">message</td><td>Envía un texto fijo</td><td><code class="mono">content</code></td></tr>
+        <tr><td class="id-cell">interactive</td><td>Mensaje con botones</td><td><code class="mono">header, body, buttons[]</code></td></tr>
+        <tr><td class="id-cell">collect_input</td><td>Pide y guarda un dato en un slot</td><td><code class="mono">prompt, slot_name, validator</code></td></tr>
+        <tr><td class="id-cell">condition</td><td>Ramifica según expresión JMESPath</td><td><code class="mono">expr</code></td></tr>
+        <tr><td class="id-cell">rag_lookup</td><td>Consulta la base de conocimiento</td><td><code class="mono">query_template, top_k (≤20), slot_name</code></td></tr>
+        <tr><td class="id-cell">llm_generate</td><td>Genera respuesta con el LLM</td><td><code class="mono">system_prompt, max_tokens (≤1000), temperature</code></td></tr>
+        <tr><td class="id-cell">api_call</td><td>Llama una API externa (con guarda SSRF)</td><td><code class="mono">url, method, headers, body_template</code></td></tr>
+        <tr><td class="id-cell">end</td><td>Termina el flujo (nodo terminal)</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:8px"><code class="mono">FlowGraphValidator</code> valida el grafo en el backend: entry node existe, sin nodos huérfanos (BFS), tipos válidos, JMESPath sin patrones peligrosos, URLs sin IPs privadas (SSRF), topes de <code class="mono">max_tokens</code> y <code class="mono">top_k</code>.</p>
+  </section>
+
+  <!-- SEGURIDAD -->
+  <section id="seguridad">
+    <p class="eyebrow">Seguridad</p>
+    <h2 class="section-title">Defensa por capas</h2>
+    <table>
+      <thead><tr><th style="width:190px">Mecanismo</th><th>Dónde</th><th>Propósito</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">HMAC-SHA256</td><td>gateway · <code class="mono">SignatureVerifier</code></td><td>Verifica que el webhook viene de Meta. Comparación en tiempo constante.</td></tr>
+        <tr><td class="id-cell">JWT HS256</td><td>tenant-api</td><td>Autenticación de sesión del dashboard (12 h por defecto).</td></tr>
+        <tr><td class="id-cell">AES-256-GCM</td><td>tenant-api ↔ flow-engine</td><td>Cifra el <code class="mono">access_token</code> de WhatsApp en reposo (<code class="mono">MASTER_KEY</code>). Se descifra solo en flow-engine, justo antes de llamar a Meta.</td></tr>
+        <tr><td class="id-cell">argon2id</td><td>tenant-api</td><td>Hashing de contraseñas con propiedades memory-hard.</td></tr>
+        <tr><td class="id-cell">RLS (Postgres)</td><td>todas las tablas de tenant</td><td>Aislamiento a nivel de fila. <code class="mono">ENABLE</code> + <code class="mono">FORCE ROW LEVEL SECURITY</code>.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout" style="margin-top:16px">
+      <strong>El mecanismo de RLS (y su trampa):</strong> cada política es <code class="mono">USING (tenant_id = current_setting('app.tenant_id', true)::uuid)</code>. Toda transacción debe ejecutar <code class="mono">SET LOCAL app.tenant_id = '&lt;uuid&gt;'</code> antes de consultar. Si no se setea, el GUC devuelve <code class="mono">NULL</code>, el cast a uuid falla y la política <strong>niega el acceso</strong> — falla cerrado (fail-closed), no abierto. Dos roles de conexión: <code class="mono">app_user</code> (sin BYPASSRLS, runtime) y el migrador (con BYPASSRLS, solo para <code class="mono">make migrate</code>).
+    </div>
+  </section>
+
+  <!-- DESPLIEGUE -->
+  <section id="despliegue">
+    <p class="eyebrow">Despliegue</p>
+    <h2 class="section-title">Topología y operación</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>Composición (14 servicios)</h3>
+        <p style="margin-bottom:10px">App: <code class="mono">gateway · tenant-api · flow-engine ×2 · rag-indexer</code><br>
+        Infra: <code class="mono">postgres · redis · chromadb · minio · minio-init · caddy</code><br>
+        Ops: <code class="mono">loki · promtail · grafana · pg-backup</code></p>
+      </div>
+      <div class="card">
+        <h3>flow-engine: rol por réplica</h3>
+        <p>Variable <code class="mono">MODE</code> controla cada réplica:</p>
+        <ul class="clean" style="margin-top:8px">
+          <li><code class="mono">both</code> — consumer de stream + API admin (default)</li>
+          <li><code class="mono">consumer</code> — solo consumidor de stream</li>
+          <li><code class="mono">admin</code> — solo API admin (dry-run)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid cols-3" style="margin-top:16px">
+      <div class="card"><div class="role">Reproducibilidad</div><h3>Docker-first</h3><p>Todo vía <code class="mono">make</code>. pnpm con lockfiles; build-scripts aprobados explícitamente.</p></div>
+      <div class="card"><div class="role">Arranque ordenado</div><h3>Healthchecks</h3><p><code class="mono">make wait-infra</code> bloquea hasta que Postgres y Redis estén sanos antes de levantar la app.</p></div>
+      <div class="card"><div class="role">Observabilidad</div><h3>Loki + Grafana</h3><p>Promtail recolecta logs JSON estructurados de todos los contenedores hacia Loki.</p></div>
+    </div>
+  </section>
+
+  <!-- ESTADO ACTUAL -->
+  <section id="estado">
+    <p class="eyebrow">Estado actual</p>
+    <h2 class="section-title">Qué está construido hoy</h2>
+    <div class="legend">
+      <span class="badge b-done">✅ Implementado</span>
+      <span class="badge b-partial">🟡 Parcial / a reforzar</span>
+      <span class="badge b-todo">🔴 Pendiente</span>
+      <span class="badge b-plan">🔵 Planificado (con diseño)</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:160px">Servicio</th><th>Capacidades implementadas</th><th style="width:120px">Estado</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">gateway</td><td>Webhook de Meta, verificación HMAC-SHA256 en tiempo constante, resolución de tenant por <code class="mono">phone_number_id</code>, encolado a Redis Stream, health checks.</td><td><span class="badge b-done">✅ Completo</span></td></tr>
+        <tr><td class="id-cell">tenant-api</td><td>Registro/login (JWT HS256, argon2id), conexión de WhatsApp (token cifrado AES-256-GCM), CRUD de flujos con versionado, activación con desactivación de triggers solapados, base de conocimiento (upload a MinIO + encolado de indexado), historial de conversaciones, dry-run, RLS.</td><td><span class="badge b-done">✅ Completo</span></td></tr>
+        <tr><td class="id-cell">flow-engine</td><td>Los 8 tipos de nodo (<code class="mono">message, interactive, collect_input, condition, rag_lookup, llm_generate, api_call, end</code>), motor de ejecución con sesiones en Redis, matching de triggers, fallback RAG+LLM, Meta Send API, API admin (dry-run).</td><td><span class="badge b-done">✅ Completo</span></td></tr>
+        <tr><td class="id-cell">rag-indexer</td><td>Consumidor de Redis Stream, carga y troceo de documentos, embeddings locales (sentence-transformers, CPU), indexado en colección ChromaDB por tenant.</td><td><span class="badge b-done">✅ Completo</span></td></tr>
+        <tr><td class="id-cell">dashboard</td><td>Login, Flujos (lista + asistente + JSON avanzado), Base de conocimiento, Conversaciones, Configuración (conectar WhatsApp + probar bot). React 19 + Radix + react-hook-form.</td><td><span class="badge b-partial">🟡 Sin editor visual ni test runner</span></td></tr>
+        <tr><td class="id-cell">infra</td><td>14 servicios en Docker Compose: app + Postgres/Redis/ChromaDB/MinIO/Caddy + observabilidad (Loki/Promtail/Grafana) + pg-backup. Migraciones SQL (005), 7 ADRs, CI (Node/Python/deploy).</td><td><span class="badge b-done">✅ Operativo</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- GAPS -->
+  <section id="gaps">
+    <p class="eyebrow">Análisis de brechas</p>
+    <h2 class="section-title">Qué falta para completar el SaaS</h2>
+    <p class="lead">Relevamiento sobre el código real (no sobre el roadmap del README, que ya quedó desactualizado: el dashboard y la observabilidad ya existen).</p>
+
+    <div class="grid cols-2" style="margin-top:22px">
+      <div class="card">
+        <h3>🧩 Backend</h3>
+        <ul class="clean">
+          <li><span class="badge b-plan">🔵</span> Columna <code class="mono">flow_nodes.meta</code> (posición de nodos) — PR-A del editor visual</li>
+          <li><span class="badge b-todo">🔴</span> Facturación / planes / cuotas por tenant (el campo <code class="mono">plan</code> existe pero no se aplica)</li>
+          <li><span class="badge b-todo">🔴</span> Onboarding self-serve (Meta Embedded Signup) — hoy la conexión es manual</li>
+          <li><span class="badge b-todo">🔴</span> Campañas proactivas / mensajes con plantillas de WhatsApp</li>
+          <li><span class="badge b-todo">🔴</span> BYOK: claves de LLM por tenant</li>
+          <li><span class="badge b-partial">🟡</span> Endpoint de limpieza de versiones (las versiones de flujo se acumulan)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🖥️ Frontend (dashboard)</h3>
+        <ul class="clean">
+          <li><span class="badge b-plan">🔵</span> Editor visual de flujos (drag-and-drop) — diseño SDD completo, sin implementar</li>
+          <li><span class="badge b-todo">🔴</span> Runner de tests (no hay vitest ni jest configurado)</li>
+          <li><span class="badge b-todo">🔴</span> Home con analítica (volumen de conversaciones, métricas)</li>
+          <li><span class="badge b-todo">🔴</span> UI de facturación / suscripción</li>
+          <li><span class="badge b-partial">🟡</span> Gestión de usuarios/equipo por tenant</li>
+          <li><span class="badge b-todo">🔴</span> Wizard de onboarding guiado</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>⚙️ Microservicios</h3>
+        <ul class="clean">
+          <li><span class="badge b-done">✅</span> Los 5 servicios del núcleo están completos y desacoplados</li>
+          <li><span class="badge b-todo">🔴</span> Worker de campañas/notificaciones salientes (proactivo)</li>
+          <li><span class="badge b-todo">🔴</span> Servicio de facturación (integración Stripe)</li>
+          <li><span class="badge b-plan">🔵</span> Migración a Qdrant para tenants de alto volumen (>500K chunks)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🏗️ Infraestructura</h3>
+        <ul class="clean">
+          <li><span class="badge b-done">✅</span> Observabilidad (Loki/Promtail/Grafana) y backups de Postgres</li>
+          <li><span class="badge b-todo">🔴</span> Alta disponibilidad de Redis (Sentinel/cluster)</li>
+          <li><span class="badge b-todo">🔴</span> Multi-WABA productivo (requiere Meta Tech Provider status)</li>
+          <li><span class="badge b-partial">🟡</span> Gestión de secretos productiva (más allá de <code class="mono">.env</code>)</li>
+          <li><span class="badge b-partial">🟡</span> Gate de cobertura en CI roto por un typo (<code class="mono">coverageThresholds</code>)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- MVP -->
+  <section id="mvp">
+    <p class="eyebrow">Alcance</p>
+    <h2 class="section-title">El MVP</h2>
+    <div class="callout" style="margin-bottom:20px">
+      <strong>Definición del MVP:</strong> un negocio (operado con asistencia) conecta un número de WhatsApp en modo sandbox, define flujos y una base de conocimiento, y sus clientes reciben respuestas automáticas correctas — con aislamiento total entre tenants. <strong>Esto ya funciona de punta a punta.</strong>
+    </div>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>✅ Dentro del MVP (hecho)</h3>
+        <ul class="clean">
+          <li><span class="badge b-done">✅</span> Recepción y verificación de mensajes de WhatsApp</li>
+          <li><span class="badge b-done">✅</span> Flujos conversacionales con 8 tipos de nodo</li>
+          <li><span class="badge b-done">✅</span> Respuesta RAG + LLM cuando no hay flujo</li>
+          <li><span class="badge b-done">✅</span> Base de conocimiento por tenant (ChromaDB)</li>
+          <li><span class="badge b-done">✅</span> Aislamiento multi-tenant (RLS en Postgres)</li>
+          <li><span class="badge b-done">✅</span> Dry-run para probar el bot sin enviar</li>
+          <li><span class="badge b-done">✅</span> Dashboard operativo</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🚫 Fuera del MVP (explícito)</h3>
+        <ul class="clean">
+          <li><span class="badge b-todo">🔴</span> Registro y onboarding 100% self-serve</li>
+          <li><span class="badge b-todo">🔴</span> Multi-WABA productivo (varios clientes reales)</li>
+          <li><span class="badge b-todo">🔴</span> Facturación y cuotas por plan</li>
+          <li><span class="badge b-todo">🔴</span> Campañas proactivas (plantillas)</li>
+          <li><span class="badge b-plan">🔵</span> Editor visual de flujos</li>
+          <li><span class="badge b-todo">🔴</span> App / edición móvil</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- CASOS DE USO -->
+  <section id="casos">
+    <p class="eyebrow">Casos de uso</p>
+    <h2 class="section-title">Cómo se usa la plataforma</h2>
+    <div class="grid cols-3">
+      <div class="card"><div class="role">UC-01</div><h3>Conectar WhatsApp</h3><p>El negocio vincula su WhatsApp Business Account y obtiene un bot activo. <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-02</div><h3>Definir flujos</h3><p>Arma grafos de conversación disparados por palabras clave. <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-03</div><h3>Cargar conocimiento</h3><p>Sube FAQ/catálogo para respuestas RAG sobre datos reales. <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-04</div><h3>Atender al cliente</h3><p>El cliente escribe por WhatsApp y el bot responde (flujo o RAG+LLM). <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-05</div><h3>Probar el bot</h3><p>Dry-run: simula una conversación sin enviar mensajes reales. <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-06</div><h3>Revisar conversaciones</h3><p>Consulta el historial por número de WhatsApp y fechas. <span class="badge b-done">✅</span></p></div>
+      <div class="card"><div class="role">UC-07</div><h3>Editar flujos visualmente</h3><p>Construir el grafo arrastrando nodos, sin JSON. <span class="badge b-plan">🔵 Planificado</span></p></div>
+      <div class="card"><div class="role">UC-08</div><h3>Enviar campañas</h3><p>Mensajes proactivos con plantillas aprobadas por Meta. <span class="badge b-todo">🔴 Pendiente</span></p></div>
+      <div class="card"><div class="role">UC-09</div><h3>Registro autónomo</h3><p>Un negocio se da de alta y paga su plan sin soporte. <span class="badge b-todo">🔴 Pendiente</span></p></div>
+    </div>
+  </section>
+
+  <!-- HISTORIAS -->
+  <section id="historias">
+    <p class="eyebrow">Historias de usuario</p>
+    <h2 class="section-title">Quién necesita qué, y para qué</h2>
+    <table>
+      <thead><tr><th style="width:90px">ID</th><th>Historia</th><th style="width:120px">Estado</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">HU-01</td><td>Como <b>dueño de negocio</b>, quiero conectar mi WhatsApp Business para automatizar respuestas sin programar.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-02</td><td>Como <b>administrador</b>, quiero definir flujos por palabras clave para guiar la conversación según la intención del cliente.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-03</td><td>Como <b>administrador</b>, quiero subir documentos (FAQ, catálogo) para que el bot responda con información real y no inventada.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-04</td><td>Como <b>administrador</b>, quiero probar el bot antes de publicarlo para evitar errores frente a clientes reales.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-05</td><td>Como <b>administrador</b>, quiero ver las conversaciones para entender qué consultan mis clientes.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-06</td><td>Como <b>cliente final</b>, quiero respuestas inmediatas y correctas por WhatsApp a cualquier hora.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-07</td><td>Como <b>operador de la plataforma</b>, quiero aislamiento total entre tenants para garantizar la privacidad de cada negocio.</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">HU-08</td><td>Como <b>administrador no técnico</b>, quiero un editor visual de flujos para no escribir JSON a mano.</td><td><span class="badge b-plan">🔵 Planificado</span></td></tr>
+        <tr><td class="id-cell">HU-09</td><td>Como <b>nuevo cliente</b>, quiero registrarme y conectar mi WhatsApp solo, sin depender de soporte.</td><td><span class="badge b-todo">🔴</span></td></tr>
+        <tr><td class="id-cell">HU-10</td><td>Como <b>dueño de la plataforma</b>, quiero cobrar por planes y limitar uso por cuota para monetizar.</td><td><span class="badge b-todo">🔴</span></td></tr>
+        <tr><td class="id-cell">HU-11</td><td>Como <b>administrador</b>, quiero enviar campañas proactivas con plantillas para reactivar clientes.</td><td><span class="badge b-todo">🔴</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- REQUERIMIENTOS FUNCIONALES -->
+  <section id="rf">
+    <p class="eyebrow">Requerimientos</p>
+    <h2 class="section-title">Requerimientos funcionales</h2>
+    <table>
+      <thead><tr><th style="width:80px">ID</th><th>Requerimiento</th><th style="width:140px">Servicio</th><th style="width:110px">Estado</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">RF-01</td><td>Registro y autenticación de tenants (JWT HS256, hashing argon2id)</td><td>tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-02</td><td>Conexión de WhatsApp Business con token cifrado en reposo (AES-256-GCM)</td><td>tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-03</td><td>CRUD de flujos con versionado (cada update crea nueva versión)</td><td>tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-04</td><td>Activación de flujo desactivando triggers solapados</td><td>tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-05</td><td>8 tipos de nodo ejecutables en el grafo</td><td>flow-engine</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-06</td><td>Motor de ejecución con sesiones y estado (IDLE/IN_FLOW/LLM_FALLBACK/ERROR)</td><td>flow-engine</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-07</td><td>Fallback RAG + LLM cuando ningún flujo matchea</td><td>flow-engine</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-08</td><td>Base de conocimiento: upload, troceo, embedding e indexado por tenant</td><td>rag-indexer</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-09</td><td>Recepción de webhooks de Meta con verificación HMAC-SHA256</td><td>gateway</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-10</td><td>Enrutamiento de mensaje entrante al tenant por <code class="mono">phone_number_id</code></td><td>gateway</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-11</td><td>Historial de conversaciones consultable por número y fecha</td><td>tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-12</td><td>Dry-run para probar el bot sin enviar a WhatsApp</td><td>tenant-api · flow-engine</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-13</td><td>Aislamiento de datos entre tenants (Row Level Security)</td><td>Postgres · tenant-api</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">RF-14</td><td>Editor visual de flujos (canvas drag-and-drop, 8 formularios tipados)</td><td>dashboard</td><td><span class="badge b-plan">🔵</span></td></tr>
+        <tr><td class="id-cell">RF-15</td><td>Persistencia de posición de nodos (columna <code class="mono">meta</code>)</td><td>tenant-api</td><td><span class="badge b-plan">🔵</span></td></tr>
+        <tr><td class="id-cell">RF-16</td><td>Onboarding self-serve (Meta Embedded Signup)</td><td>tenant-api · dashboard</td><td><span class="badge b-todo">🔴</span></td></tr>
+        <tr><td class="id-cell">RF-17</td><td>Campañas proactivas con plantillas de WhatsApp</td><td>nuevo worker</td><td><span class="badge b-todo">🔴</span></td></tr>
+        <tr><td class="id-cell">RF-18</td><td>Facturación, planes y cuotas de uso</td><td>nuevo servicio</td><td><span class="badge b-todo">🔴</span></td></tr>
+        <tr><td class="id-cell">RF-19</td><td>BYOK: claves de LLM propias por tenant</td><td>tenant-api · flow-engine</td><td><span class="badge b-todo">🔴</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- REQUERIMIENTOS NO FUNCIONALES -->
+  <section id="rnf">
+    <p class="eyebrow">Requerimientos</p>
+    <h2 class="section-title">Requerimientos no funcionales</h2>
+    <table>
+      <thead><tr><th style="width:170px">Atributo</th><th>Requerimiento</th><th style="width:110px">Estado</th></tr></thead>
+      <tbody>
+        <tr><td class="id-cell">Seguridad</td><td>HMAC-SHA256 (webhook), JWT HS256 (auth), AES-256-GCM (tokens en reposo), argon2id (passwords), comparación en tiempo constante</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Aislamiento</td><td>Multi-tenancy con RLS en todas las tablas con datos de tenant; toda transacción setea <code class="mono">app.tenant_id</code></td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Escalabilidad</td><td>flow-engine con 2 réplicas; desacople total por Redis Streams; embeddings locales (costo marginal cero)</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Observabilidad</td><td>Logs centralizados Loki/Promtail + Grafana; logging estructurado JSON</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Reproducibilidad</td><td>Docker-first; pnpm con lockfiles; migraciones SQL versionadas; comandos vía Makefile</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Disponibilidad</td><td>Backups automáticos de Postgres (pg-backup); HA de Redis (Sentinel) aún pendiente</td><td><span class="badge b-partial">🟡</span></td></tr>
+        <tr><td class="id-cell">Calidad / Testing</td><td>tenant-api y servicios Python con tests; <b>dashboard sin runner de tests</b>; gate de cobertura inactivo por typo</td><td><span class="badge b-partial">🟡</span></td></tr>
+        <tr><td class="id-cell">Portabilidad</td><td>Almacenamiento S3-compatible (MinIO → S3 en prod); HTTPS automático con Caddy</td><td><span class="badge b-done">✅</span></td></tr>
+        <tr><td class="id-cell">Mantenibilidad</td><td>Arquitectura hexagonal en los 5 servicios; 7 ADRs; contratos JSON Schema para los streams</td><td><span class="badge b-done">✅</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ROADMAP -->
+  <section id="roadmap">
+    <p class="eyebrow">Plan</p>
+    <h2 class="section-title">Roadmap por fases</h2>
+    <div class="timeline">
+      <div class="phase">
+        <div class="when">Fase 1 · Hoy</div>
+        <div class="what"><h4>MVP — núcleo funcional <span class="badge b-done">✅</span></h4><ul><li>Webhooks, motor de flujos (8 nodos), RAG+LLM, multi-tenancy RLS, dashboard operativo, single-WABA sandbox.</li></ul></div>
+      </div>
+      <div class="phase">
+        <div class="when">Fase 2 · Próximo</div>
+        <div class="what"><h4>Autonomía del tenant + calidad <span class="badge b-plan">🔵</span></h4><ul><li>Editor visual de flujos (PR-A: columna <code class="mono">meta</code> en backend → PR-B: editor en dashboard).</li><li>Levantar runner de tests en el dashboard (hoy no existe).</li><li>Activar el gate de cobertura tras subir cobertura.</li></ul></div>
+      </div>
+      <div class="phase">
+        <div class="when">Fase 3 · Comercial</div>
+        <div class="what"><h4>Self-serve + monetización <span class="badge b-todo">🔴</span></h4><ul><li>Onboarding self-serve (Meta Embedded Signup), multi-WABA real (Tech Provider).</li><li>Facturación con Stripe, planes y cuotas de uso.</li></ul></div>
+      </div>
+      <div class="phase">
+        <div class="when">Fase 4 · Crecimiento</div>
+        <div class="what"><h4>Engagement + IA flexible <span class="badge b-todo">🔴</span></h4><ul><li>Campañas proactivas con plantillas de WhatsApp.</li><li>BYOK (claves de LLM por tenant), analítica avanzada en el dashboard.</li></ul></div>
+      </div>
+      <div class="phase">
+        <div class="when">Fase 5 · Escala</div>
+        <div class="what"><h4>Alta disponibilidad <span class="badge b-plan">🔵</span></h4><ul><li>Redis Sentinel/HA, migración a Qdrant para tenants de alto volumen.</li></ul></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">Próximos pasos concretos</h3>
+    <ol style="font-size:14.5px; color:var(--ink); padding-left:20px">
+      <li>Commitear el trabajo de la sesión (simplificaciones + tests de flow use cases) en su rama.</li>
+      <li><b>PR-A</b> — columna <code class="mono">flow_nodes.meta</code> + DTOs (8 tareas, ~6 archivos) y correr <code class="mono">make migrate</code>.</li>
+      <li>Configurar runner de tests en el dashboard (vitest) — bloquea las pruebas de PR-B.</li>
+      <li><b>PR-B</b> — editor visual (encadenado tras PR-A): canvas, paleta, inspector, 8 nodos y 8 formularios.</li>
+    </ol>
+  </section>
+
+</main>
+
+<footer>
+  WhatsApp AI SaaS — presentación generada a partir del relevamiento del código (README, openspec, los 5 servicios y la infraestructura).
+  Los estados (✅ / 🟡 / 🔴 / 🔵) reflejan lo verificado en el repositorio al momento de generarla, no promesas.
+</footer>
+
+</body>
+</html>

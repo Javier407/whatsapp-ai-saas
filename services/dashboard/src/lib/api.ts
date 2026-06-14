@@ -31,10 +31,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export type LoginResponse = { token: string; tenant_id: string; expires_at: string };
 
 export const auth = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, tenantSlug: string) =>
     request<LoginResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, tenant_slug: tenantSlug }),
     }),
 };
 
@@ -79,9 +79,42 @@ export type Flow = {
   updated_at: string;
 };
 
+export type FlowNodeDto = {
+  id: string;
+  node_key: string;
+  type:
+    | "message"
+    | "interactive"
+    | "collect_input"
+    | "condition"
+    | "rag_lookup"
+    | "llm_generate"
+    | "api_call"
+    | "end";
+  config: Record<string, unknown>;
+  transitions: Array<{ next: string; condition?: string }>;
+  meta: { position?: { x: number; y: number } } & Record<string, unknown>;
+};
+
+export type FlowWithNodes = Flow & { nodes: FlowNodeDto[] };
+
+export type UpdateFlowDto = {
+  name?: string;
+  description?: string;
+  trigger?: Record<string, unknown>;
+  entry_node?: string;
+  nodes?: Array<{
+    node_key: string;
+    type: FlowNodeDto["type"];
+    config: Record<string, unknown>;
+    transitions: Array<{ next: string; condition?: string }>;
+    meta?: Record<string, unknown>;
+  }>;
+};
+
 export const flows = {
   list: () => request<Flow[]>("/flows"),
-  get: (id: string) => request<Flow>(`/flows/${id}`),
+  get: (id: string) => request<FlowWithNodes>(`/flows/${id}`),
   create: (data: unknown) =>
     request<Flow>("/flows", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: unknown) =>
@@ -147,7 +180,10 @@ export const conversations = {
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     if (params?.limit) qs.set("limit", String(params.limit));
-    return request<ConversationLog[]>(`/conversations?${qs}`);
+    // The endpoint returns a paginated envelope: { data: [...], meta: {...} }
+    return request<{ data: ConversationLog[]; meta: { total: number; limit: number; offset: number } }>(
+      `/conversations?${qs}`,
+    ).then((page) => page.data);
   },
 };
 
@@ -155,12 +191,25 @@ export const conversations = {
 
 export type DryRunResult = {
   reply: string;
-  flow_id: string | null;
-  trace: unknown[];
+  session_state: string;
+  sent: { type: string; to: string; text?: string }[];
 };
 
+// flow-engine returns { session_state, current_node, slots, sent: [...] };
+// flatten the sent messages into a single reply string for display.
 export const dryRun = (message: string, simulated_wa_id = "test-preview") =>
-  request<DryRunResult>("/dry-run", {
+  request<{
+    session_state: string;
+    current_node: string | null;
+    slots: Record<string, unknown>;
+    sent: { type: string; to: string; text?: string }[];
+  }>("/dry-run", {
     method: "POST",
     body: JSON.stringify({ message, simulated_wa_id }),
-  });
+  }).then((r) => ({
+    reply:
+      r.sent.map((s) => s.text).filter(Boolean).join("\n\n") ||
+      "(sin respuesta)",
+    session_state: r.session_state,
+    sent: r.sent,
+  }));

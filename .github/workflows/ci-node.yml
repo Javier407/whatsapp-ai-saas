@@ -21,17 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # corepack/pnpm must be enabled BEFORE setup-node, because setup-node's
+      # `cache: pnpm` needs the pnpm executable on PATH to resolve the cache.
+      - name: Enable pnpm
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: services/gateway/pnpm-lock.yaml
 
-      - name: Enable pnpm
-        run: corepack enable
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - name: Lint
         run: pnpm lint
@@ -52,17 +54,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # corepack/pnpm must be enabled BEFORE setup-node, because setup-node's
+      # `cache: pnpm` needs the pnpm executable on PATH to resolve the cache.
+      - name: Enable pnpm
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: services/tenant-api/pnpm-lock.yaml
 
-      - name: Enable pnpm
-        run: corepack enable
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - name: Lint
         run: pnpm lint

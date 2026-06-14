@@ -21,6 +21,8 @@ export interface FlowNode {
   type: NodeType;
   config: Record<string, unknown>;
   transitions: Transition[];
+  /** UI-only presentation state (e.g. canvas position). Ignored by the flow-engine. */
+  meta: Record<string, unknown>;
   createdAt: Date;
 }
 
