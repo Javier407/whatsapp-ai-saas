@@ -130,7 +130,7 @@ class TestMessageNode:
         node = _make_node(
             node_type="message",
             config={"content": "Hello"},
-            transitions=[{"condition": "default", "next_node": "n2"}],
+            transitions=[{"condition": {"type": "always"}, "next": "n2"}],
         )
         result = execute_message(node, _make_session(), "", _make_deps())
         assert result.next_node == "n2"
@@ -158,7 +158,7 @@ class TestCollectInputNode:
         node = _make_node(
             node_type="collect_input",
             config={"slot": "phone"},
-            transitions=[{"condition": "default", "next_node": "next"}],
+            transitions=[{"condition": {"type": "always"}, "next": "next"}],
         )
         result = execute_collect_input(node, _make_session(), "5512345678", _make_deps())
         assert result.slot_updates == {"phone": "5512345678"}
@@ -168,7 +168,7 @@ class TestCollectInputNode:
         node = _make_node(
             node_type="collect_input",
             config={"slot": "phone", "validation": r"\d{10}"},
-            transitions=[{"condition": "default", "next_node": "next"}],
+            transitions=[{"condition": {"type": "always"}, "next": "next"}],
         )
         result = execute_collect_input(node, _make_session(), "5512345678", _make_deps())
         assert result.slot_updates == {"phone": "5512345678"}
@@ -195,8 +195,8 @@ class TestConditionNode:
             node_type="condition",
             config={},
             transitions=[
-                {"condition": "slots.age > `18`", "next_node": "adult"},
-                {"condition": "default", "next_node": "minor"},
+                {"condition": "slots.age > `18`", "next": "adult"},
+                {"condition": {"type": "always"}, "next": "minor"},
             ],
         )
         session = _make_session(slots={"age": 25})
@@ -208,8 +208,8 @@ class TestConditionNode:
             node_type="condition",
             config={},
             transitions=[
-                {"condition": "slots.age > `100`", "next_node": "centenarian"},
-                {"condition": "default", "next_node": "normal"},
+                {"condition": "slots.age > `100`", "next": "centenarian"},
+                {"condition": {"type": "always"}, "next": "normal"},
             ],
         )
         session = _make_session(slots={"age": 25})
