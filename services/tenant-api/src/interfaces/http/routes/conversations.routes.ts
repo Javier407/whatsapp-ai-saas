@@ -32,8 +32,9 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
         offset: request.query.offset ? parseInt(request.query.offset, 10) : undefined,
       });
 
-      ok(reply, {
-        data: result.data.map((l) => ({
+      ok(
+        reply,
+        result.data.map((l) => ({
           id: l.id.toString(),
           wa_id: l.waId,
           direction: l.direction,
@@ -45,8 +46,7 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
           latency_ms: l.latencyMs,
           created_at: l.createdAt,
         })),
-        meta: result.meta,
-      });
+      );
     } catch (err) {
       sendDomainError(reply, err);
     }
