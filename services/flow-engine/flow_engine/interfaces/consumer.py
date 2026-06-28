@@ -22,7 +22,7 @@ from typing import Any
 import redis
 
 from flow_engine.application.flow_executor import FlowExecutor
-from flow_engine.domain.models import ConversationTurn, InboundMessage, Session
+from flow_engine.domain.models import InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, ISessionRepo, ITenantCredentialsRepo
 from flow_engine.infrastructure.redis.redis_lock import (
     RedisLock,
@@ -204,20 +204,8 @@ class FlowEngineConsumer:
             # 7. Save session
             self._session_repo.save(session)
 
-            # 8. Write conversation log (inbound + outbound turns)
-            now_str = datetime.now(timezone.utc).isoformat()
-            self._conv_log_repo.write(
-                ConversationTurn(
-                    tenant_id=msg.tenant_id,
-                    wa_id=msg.wa_id,
-                    flow_id=session.flow_id,
-                    direction="inbound",
-                    message_text="",  # PII — not stored
-                    node_id=session.current_node,
-                    llm_tokens=0,
-                    created_at=now_str,
-                )
-            )
+            # 8. Conversation logging now happens inside the executor
+            #    (inbound + outbound turns, with content) — see FlowExecutor._write_conv_log
 
         except Exception:
             logger.exception("Processing error", extra=log_extra)

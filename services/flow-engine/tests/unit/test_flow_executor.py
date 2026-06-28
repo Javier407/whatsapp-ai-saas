@@ -254,3 +254,42 @@ class TestLLMFallback:
         assert len(recording.sent) == 1
         assert recording.sent[0]["text"] == "LLM fallback reply"
         assert session.state == "IDLE"
+
+
+class TestHumanHandoff:
+    def test_request_enters_handoff_and_acks_without_llm(self) -> None:
+        llm = FakeLLMPort()
+        executor, recording, conv_log = _make_executor(flows=[], llm=llm)
+        session = _session()
+
+        executor.execute(_message("quiero hablar con un asesor"), session)
+
+        assert session.state == "HUMAN_HANDOFF"
+        assert llm.called is False  # bot must not auto-answer
+        assert len(recording.sent) == 1  # one ack only
+        directions = [t.direction for t in conv_log.logs]
+        assert directions == ["inbound", "outbound"]  # inbound + ack logged
+
+    def test_bot_stays_quiet_while_handed_off(self) -> None:
+        llm = FakeLLMPort()
+        flow = _make_simple_flow(keywords=["hola"])
+        executor, recording, conv_log = _make_executor(flows=[flow], llm=llm)
+        session = _session(state="HUMAN_HANDOFF")
+
+        executor.execute(_message("hola, alguien ahi?"), session)
+
+        assert session.state == "HUMAN_HANDOFF"  # unchanged
+        assert llm.called is False
+        assert len(recording.sent) == 0  # bot sends nothing
+        # inbound still captured so the agent sees it
+        assert [t.direction for t in conv_log.logs] == ["inbound"]
+
+    def test_normal_message_is_unaffected(self) -> None:
+        llm = FakeLLMPort()
+        executor, recording, _ = _make_executor(flows=[], llm=llm)
+        session = _session()
+
+        executor.execute(_message("cuanto cuesta el PPF?"), session)
+
+        assert session.state == "IDLE"
+        assert llm.called is True  # normal fallback still runs

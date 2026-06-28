@@ -10,10 +10,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from flow_engine.application.handoff import HANDOFF_ACK_MESSAGE, wants_human
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
 from flow_engine.application.trigger_matcher import match_trigger
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
-from flow_engine.domain.models import Flow, InboundMessage, Session
+from flow_engine.domain.models import ConversationTurn, Flow, InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSendPort, IVectorStore
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,19 @@ class FlowExecutor:
 
         # Append user turn to history (capped at _MAX_HISTORY)
         _append_to_history(session, {"role": "user", "content": message.text, "ts": now})
+
+        # Persist the inbound turn so the dashboard can show the conversation
+        self._write_conv_log(message, session, "inbound", message.text)
+
+        # Human handoff: while a human owns the conversation the bot stays quiet
+        # (the inbound is still logged above so the agent sees the full thread).
+        if session.state == "HUMAN_HANDOFF":
+            session.last_msg_at = _now_iso()
+            return
+        if wants_human(message.text):
+            self._enter_handoff(message, session)
+            session.last_msg_at = _now_iso()
+            return
 
         deps = ExecutorDeps(
             meta_send=self._meta_send,
@@ -217,6 +231,7 @@ class FlowExecutor:
         )
 
         _append_to_history(session, {"role": "assistant", "content": reply_text, "ts": _now_iso()})
+        self._write_conv_log(message, session, "outbound", reply_text, tokens)
 
         session.state = "IDLE"
 
@@ -231,6 +246,56 @@ class FlowExecutor:
             _append_to_history(
                 session, {"role": "assistant", "content": result.reply, "ts": _now_iso()}
             )
+            self._write_conv_log(message, session, "outbound", result.reply, result.llm_tokens)
+
+    def _enter_handoff(self, message: InboundMessage, session: Session) -> None:
+        """Move the conversation to HUMAN_HANDOFF and acknowledge once.
+
+        A send failure must not prevent the handoff state from persisting, so
+        the Meta send is best-effort here.
+        """
+        session.state = "HUMAN_HANDOFF"
+        try:
+            self._meta_send.send_text(
+                phone_number_id=message.phone_number_id,
+                to=message.wa_id,
+                text=HANDOFF_ACK_MESSAGE,
+                access_token=message.access_token,
+            )
+        except Exception:
+            logger.warning(
+                "Handoff ack send failed",
+                extra={"tenant_id": message.tenant_id, "wa_id": message.wa_id},
+            )
+        _append_to_history(
+            session, {"role": "assistant", "content": HANDOFF_ACK_MESSAGE, "ts": _now_iso()}
+        )
+        self._write_conv_log(message, session, "outbound", HANDOFF_ACK_MESSAGE)
+
+    def _write_conv_log(
+        self,
+        message: InboundMessage,
+        session: Session,
+        direction: str,
+        text: str,
+        llm_tokens: int = 0,
+    ) -> None:
+        """Persist one conversation turn so the dashboard can display it.
+
+        The repo swallows DB errors, so logging never breaks message processing.
+        """
+        self._conv_log_repo.write(
+            ConversationTurn(
+                tenant_id=message.tenant_id,
+                wa_id=message.wa_id,
+                flow_id=session.flow_id,
+                direction=direction,
+                message_text=text,
+                node_id=session.current_node,
+                llm_tokens=llm_tokens,
+                created_at=_now_iso(),
+            )
+        )
 
 
 # ---------------------------------------------------------------------------

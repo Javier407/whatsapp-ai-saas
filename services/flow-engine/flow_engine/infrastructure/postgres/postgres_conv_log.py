@@ -2,11 +2,12 @@
 
 Writes inbound and outbound turns to ``conversation_logs``.
 Every INSERT runs inside a transaction with SET LOCAL app.tenant_id for RLS.
-Message content is NEVER logged — only tenant_id, wa_id, message_id, direction,
-node_id, and llm_tokens are written to Postgres.
+Message text is stored in the ``content`` JSONB column so the dashboard can
+display the conversation for auditing the bot's replies.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 import psycopg2
@@ -36,15 +37,17 @@ class PostgresConvLogRepo(IConvLogRepo):
                     cur.execute(
                         """
                         INSERT INTO conversation_logs
-                            (tenant_id, wa_id, flow_id, direction,
-                             node_id, llm_tokens, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            (tenant_id, wa_id, flow_id, direction, message_type,
+                             content, node_key, llm_tokens, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             turn.tenant_id,
                             turn.wa_id,
                             turn.flow_id,
                             turn.direction,
+                            turn.message_type,
+                            json.dumps({"text": turn.message_text}),
                             turn.node_id,
                             turn.llm_tokens,
                             turn.created_at,

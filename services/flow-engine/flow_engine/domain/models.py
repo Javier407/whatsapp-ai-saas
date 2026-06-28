@@ -10,7 +10,7 @@ from typing import Any, Literal
 class Session:
     tenant_id: str
     wa_id: str
-    state: Literal["IDLE", "IN_FLOW", "LLM_FALLBACK", "ERROR"]
+    state: Literal["IDLE", "IN_FLOW", "LLM_FALLBACK", "ERROR", "HUMAN_HANDOFF"]
     flow_id: str | None
     current_node: str | None
     slots: dict[str, Any]
@@ -95,6 +95,7 @@ class ConversationTurn:
     node_id: str | None
     llm_tokens: int
     created_at: str
+    message_type: str = "text"
 
 
 @dataclass
