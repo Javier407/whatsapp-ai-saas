@@ -134,3 +134,21 @@ class TestHandoffResume:
         resp = client.post(f"/admin/handoff/{_TENANT}/{_WA}/resume", headers=_AUTH)
         assert resp.status_code == 200
         assert resp.json()["status"] == "no_session"
+
+
+class TestSessionState:
+    def test_reports_handoff(self, client: TestClient) -> None:
+        admin_api._state["session_repo"] = FakeSessionRepo(_handed_off_session())
+        resp = client.get(f"/admin/sessions/{_TENANT}/{_WA}/state", headers=_AUTH)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "HUMAN_HANDOFF"
+        assert body["handoff"] is True
+
+    def test_reports_none_when_no_session(self, client: TestClient) -> None:
+        admin_api._state["session_repo"] = FakeSessionRepo(None)
+        resp = client.get(f"/admin/sessions/{_TENANT}/{_WA}/state", headers=_AUTH)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] is None
+        assert body["handoff"] is False

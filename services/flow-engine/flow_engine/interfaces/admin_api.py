@@ -72,6 +72,27 @@ def reset_session(tenant_id: str, wa_id: str) -> dict[str, str]:
 
 
 @app.get(
+    "/admin/sessions/{tenant_id}/{wa_id}/state",
+    dependencies=[Depends(_require_internal_token)],
+)
+def session_state(tenant_id: str, wa_id: str) -> dict[str, Any]:
+    """Return the conversation's current session state (for the agent inbox).
+
+    ``state`` is None when no session exists (e.g. a fresh contact).
+    """
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+    session = session_repo.load(tenant_id, wa_id)
+    return {
+        "tenant_id": tenant_id,
+        "wa_id": wa_id,
+        "state": session.state if session else None,
+        "handoff": bool(session and session.state == "HUMAN_HANDOFF"),
+    }
+
+
+@app.get(
     "/admin/health",
     dependencies=[Depends(_require_internal_token)],
 )
