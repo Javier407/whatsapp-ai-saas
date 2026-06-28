@@ -9,7 +9,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Only declare a JSON body when one is actually sent. Fastify rejects
+      // requests that set Content-Type: application/json with an empty body
+      // (e.g. DELETE, or POST actions with no payload) with a 400.
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
@@ -19,6 +22,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     localStorage.removeItem("token");
     window.location.href = "/login";
     throw new Error("Unauthorized");
+  }
+
+  // 204 No Content (e.g. successful DELETE) has no body to parse.
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   const body = await res.json();
@@ -48,6 +56,11 @@ export type Tenant = {
   status: string;
   waba_id: string | null;
   phone_number_id: string | null;
+  whatsapp: {
+    connected: boolean;
+    waba_id: string | null;
+    phone_number_id: string | null;
+  } | null;
 };
 
 export const tenant = {
@@ -143,8 +156,12 @@ export const kb = {
   upload: (file: File, sourceType: string) => {
     const token = getToken();
     const form = new FormData();
-    form.append("file", file);
+    // Text fields MUST come before the file part: the backend reads them from
+    // the multipart stream via request.file(), and fields after the file are
+    // not yet parsed. The backend also requires a `name` field.
+    form.append("name", file.name);
     form.append("source_type", sourceType);
+    form.append("file", file);
     return fetch(`${BASE}/kb/documents`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -173,6 +190,8 @@ export type ConversationLog = {
   created_at: string;
 };
 
+export type SessionState = { state: string | null; handoff: boolean };
+
 export const conversations = {
   list: (params?: { wa_id?: string; from?: string; to?: string; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -180,11 +199,20 @@ export const conversations = {
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     if (params?.limit) qs.set("limit", String(params.limit));
-    // The endpoint returns a paginated envelope: { data: [...], meta: {...} }
-    return request<{ data: ConversationLog[]; meta: { total: number; limit: number; offset: number } }>(
-      `/conversations?${qs}`,
-    ).then((page) => page.data);
+    // The route returns the list directly; request() already unwraps `data`.
+    return request<ConversationLog[]>(`/conversations?${qs}`);
   },
+  getState: (waId: string) =>
+    request<SessionState>(`/conversations/${encodeURIComponent(waId)}/state`),
+  reply: (waId: string, message: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+  resume: (waId: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/resume`, {
+      method: "POST",
+    }),
 };
 
 // ── Dry-run ───────────────────────────────────────────────────────────────────

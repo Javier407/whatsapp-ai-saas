@@ -5,6 +5,7 @@ import { conversations, type ConversationLog } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -20,6 +21,82 @@ function messageText(log: ConversationLog): string {
 
 function directionLabel(direction: string) {
   return direction === "inbound" ? "Entrante" : "Saliente";
+}
+
+function HandoffPanel({ waId, onReplied }: { waId: string; onReplied: () => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const stateQuery = useQuery({
+    queryKey: ["conv-state", waId],
+    queryFn: () => conversations.getState(waId),
+  });
+
+  const handoff = stateQuery.data?.handoff ?? false;
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await stateQuery.refetch();
+      onReplied();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-t pt-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground text-sm">Estado:</span>
+        {stateQuery.isLoading ? (
+          <span className="text-sm text-muted-foreground">cargando…</span>
+        ) : handoff ? (
+          <Badge variant="destructive">En atención humana</Badge>
+        ) : (
+          <Badge variant="secondary">Bot activo</Badge>
+        )}
+      </div>
+
+      {handoff && (
+        <div className="space-y-2">
+          <Textarea
+            placeholder="Escribí la respuesta al cliente…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={busy || !text.trim()}
+              onClick={() =>
+                run(async () => {
+                  await conversations.reply(waId, text.trim());
+                  setText("");
+                })
+              }
+            >
+              Enviar respuesta
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => run(() => conversations.resume(waId))}
+            >
+              Reanudar bot
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ConversationsPage() {
@@ -139,6 +216,7 @@ export function ConversationsPage() {
               <pre className="text-xs bg-muted rounded p-4 overflow-auto max-h-48">
                 {JSON.stringify(selected.content, null, 2)}
               </pre>
+              <HandoffPanel waId={selected.wa_id} onReplied={() => refetch()} />
             </div>
           )}
         </DialogContent>
