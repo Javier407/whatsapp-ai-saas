@@ -54,6 +54,21 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
     }
   });
 
+  /** GET /api/v1/conversations/:wa_id/state — bot vs human-handoff status */
+  fastify.get<{
+    Params: { wa_id: string };
+  }>('/:wa_id/state', async (request, reply) => {
+    try {
+      const state = await opts.flowEngineClient.getSessionState(
+        request.tenantId,
+        request.params.wa_id,
+      );
+      ok(reply, state);
+    } catch (err) {
+      sendDomainError(reply, err);
+    }
+  });
+
   /** POST /api/v1/conversations/:wa_id/reply — agent reply during handoff */
   fastify.post<{
     Params: { wa_id: string };

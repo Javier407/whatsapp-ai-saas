@@ -1,4 +1,8 @@
-import type { IFlowEngineClient, DryRunResult } from '../../domain/ports/IFlowEngineClient.js';
+import type {
+  IFlowEngineClient,
+  DryRunResult,
+  SessionStateResult,
+} from '../../domain/ports/IFlowEngineClient.js';
 import { ExternalServiceError } from '../../domain/errors.js';
 
 export class FlowEngineHttpClient implements IFlowEngineClient {
@@ -101,5 +105,26 @@ export class FlowEngineHttpClient implements IFlowEngineClient {
     if (!res.ok) {
       throw new ExternalServiceError('flow-engine', `resume returned ${res.status}`);
     }
+  }
+
+  async getSessionState(tenantId: string, waId: string): Promise<SessionStateResult> {
+    const url = `${this.baseUrl}/admin/sessions/${tenantId}/${encodeURIComponent(waId)}/state`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'GET',
+        headers: { 'X-Internal-Token': this.internalToken },
+      });
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      throw new ExternalServiceError('flow-engine', `session state failed: ${m}`);
+    }
+
+    if (!res.ok) {
+      throw new ExternalServiceError('flow-engine', `session state returned ${res.status}`);
+    }
+
+    const body = (await res.json()) as { state: string | null; handoff: boolean };
+    return { state: body.state ?? null, handoff: Boolean(body.handoff) };
   }
 }
