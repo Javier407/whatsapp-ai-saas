@@ -138,6 +138,10 @@ def main() -> None:
             "chroma_retriever": vector_store,
             "db_url": cfg.database_url,
             "internal_token": cfg.internal_token,
+            # Needed by the handoff agent-reply / resume endpoints
+            "meta_send": meta_send,
+            "tenant_credentials_repo": tenant_credentials_repo,
+            "conv_log_repo": conv_log_repo,
         }
     )
 

@@ -141,6 +141,88 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
     }
 
 
+class HandoffSendRequest(BaseModel):
+    message: str
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/send",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_send(tenant_id: str, wa_id: str, body: HandoffSendRequest) -> dict[str, str]:
+    """Send an agent's reply to the customer as the business (during handoff)."""
+    from datetime import datetime, timezone
+
+    from flow_engine.domain.models import ConversationTurn
+
+    creds_repo = _state.get("tenant_credentials_repo")
+    meta_send = _state.get("meta_send")
+    conv_log_repo = _state.get("conv_log_repo")
+    if creds_repo is None or meta_send is None or conv_log_repo is None:
+        raise HTTPException(status_code=503, detail="Handoff dependencies not initialized")
+
+    text = body.message.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="message must not be empty")
+
+    creds = creds_repo.get_credentials(tenant_id)
+    if creds is None:
+        raise HTTPException(status_code=404, detail="Tenant has no WhatsApp credentials")
+    phone_number_id, access_token = creds
+
+    try:
+        meta_send.send_text(
+            phone_number_id=phone_number_id,
+            to=wa_id,
+            text=text,
+            access_token=access_token,
+        )
+    except Exception as exc:
+        logger.exception("Agent reply send failed", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+        raise HTTPException(status_code=502, detail="Failed to deliver message") from exc
+
+    # Log the agent's reply so it appears in the conversation thread.
+    # node_key='human_agent' marks it as a human (not bot) message.
+    conv_log_repo.write(
+        ConversationTurn(
+            tenant_id=tenant_id,
+            wa_id=wa_id,
+            flow_id=None,
+            direction="outbound",
+            message_text=text,
+            node_id="human_agent",
+            llm_tokens=0,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+    )
+    logger.info("Agent reply sent", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "sent"}
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/resume",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_resume(tenant_id: str, wa_id: str) -> dict[str, str]:
+    """Hand the conversation back to the bot (clear HUMAN_HANDOFF)."""
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+
+    session = session_repo.load(tenant_id, wa_id)
+    if session is None:
+        return {"status": "no_session", "tenant_id": tenant_id, "wa_id": wa_id}
+
+    session.state = "IDLE"
+    session.flow_id = None
+    session.current_node = None
+    session.slots = {}
+    session.retry_count = 0
+    session_repo.save(session)
+    logger.info("Handoff resumed via admin", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "resumed"}
+
+
 # ---------------------------------------------------------------------------
 # Dependency health helpers
 # ---------------------------------------------------------------------------
