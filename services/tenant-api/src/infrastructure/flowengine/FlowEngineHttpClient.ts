@@ -59,4 +59,47 @@ export class FlowEngineHttpClient implements IFlowEngineClient {
 
     return res.json() as Promise<DryRunResult>;
   }
+
+  async sendAgentReply(tenantId: string, waId: string, message: string): Promise<void> {
+    const url = `${this.baseUrl}/admin/handoff/${tenantId}/${encodeURIComponent(waId)}/send`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Internal-Token': this.internalToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      throw new ExternalServiceError('flow-engine', `agent reply failed: ${m}`);
+    }
+
+    if (!res.ok) {
+      throw new ExternalServiceError('flow-engine', `agent reply returned ${res.status}`);
+    }
+  }
+
+  async resumeHandoff(tenantId: string, waId: string): Promise<void> {
+    const url = `${this.baseUrl}/admin/handoff/${tenantId}/${encodeURIComponent(waId)}/resume`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Internal-Token': this.internalToken,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      throw new ExternalServiceError('flow-engine', `resume failed: ${m}`);
+    }
+
+    if (!res.ok) {
+      throw new ExternalServiceError('flow-engine', `resume returned ${res.status}`);
+    }
+  }
 }

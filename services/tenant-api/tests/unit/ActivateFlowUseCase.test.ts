@@ -54,6 +54,8 @@ function makeEngineClient(overrides: Partial<IFlowEngineClient> = {}): IFlowEngi
   return {
     reloadTenantFlows: jest.fn().mockResolvedValue(undefined),
     dryRun: jest.fn(),
+    sendAgentReply: jest.fn().mockResolvedValue(undefined),
+    resumeHandoff: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

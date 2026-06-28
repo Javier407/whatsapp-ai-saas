@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ListConversationsUseCase } from '../../../application/conversations/ListConversationsUseCase.js';
+import type { IFlowEngineClient } from '../../../domain/ports/IFlowEngineClient.js';
 import { ok, sendDomainError } from '../reply.js';
 
 interface ConversationRoutesDeps {
   listConversationsUseCase: ListConversationsUseCase;
+  flowEngineClient: IFlowEngineClient;
 }
 
 export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = async (
@@ -47,6 +49,38 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
           created_at: l.createdAt,
         })),
       );
+    } catch (err) {
+      sendDomainError(reply, err);
+    }
+  });
+
+  /** POST /api/v1/conversations/:wa_id/reply — agent reply during handoff */
+  fastify.post<{
+    Params: { wa_id: string };
+    Body: { message: string };
+  }>('/:wa_id/reply', async (request, reply) => {
+    try {
+      const message = (request.body?.message ?? '').trim();
+      if (!message) {
+        return reply.status(400).send({
+          data: null,
+          error: { code: 'VALIDATION_ERROR', message: 'message must not be empty' },
+        });
+      }
+      await opts.flowEngineClient.sendAgentReply(request.tenantId, request.params.wa_id, message);
+      ok(reply, { status: 'sent' });
+    } catch (err) {
+      sendDomainError(reply, err);
+    }
+  });
+
+  /** POST /api/v1/conversations/:wa_id/resume — hand control back to the bot */
+  fastify.post<{
+    Params: { wa_id: string };
+  }>('/:wa_id/resume', async (request, reply) => {
+    try {
+      await opts.flowEngineClient.resumeHandoff(request.tenantId, request.params.wa_id);
+      ok(reply, { status: 'resumed' });
     } catch (err) {
       sendDomainError(reply, err);
     }

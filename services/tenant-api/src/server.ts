@@ -158,6 +158,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(conversationsRoutes, {
         prefix: '/conversations',
         listConversationsUseCase,
+        flowEngineClient,
       });
 
       await api.register(dryrunRoutes, {
