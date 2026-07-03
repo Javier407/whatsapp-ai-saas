@@ -54,6 +54,7 @@ function makeEngineClient(overrides: Partial<IFlowEngineClient> = {}): IFlowEngi
     dryRun: jest.fn(),
     sendAgentReply: jest.fn().mockResolvedValue(undefined),
     resumeHandoff: jest.fn().mockResolvedValue(undefined),
+    takeoverHandoff: jest.fn().mockResolvedValue(undefined),
     getSessionState: jest.fn().mockResolvedValue({ state: null, handoff: false }),
     ...overrides,
   };

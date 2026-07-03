@@ -100,4 +100,16 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
       sendDomainError(reply, err);
     }
   });
+
+  /** POST /api/v1/conversations/:wa_id/takeover — pause the bot, human takes over */
+  fastify.post<{
+    Params: { wa_id: string };
+  }>('/:wa_id/takeover', async (request, reply) => {
+    try {
+      await opts.flowEngineClient.takeoverHandoff(request.tenantId, request.params.wa_id);
+      ok(reply, { status: 'taken_over' });
+    } catch (err) {
+      sendDomainError(reply, err);
+    }
+  });
 };

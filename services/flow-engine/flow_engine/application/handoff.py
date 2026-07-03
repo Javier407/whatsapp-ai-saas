@@ -11,6 +11,7 @@ per-tenant configurable list once tenant settings grow.
 """
 from __future__ import annotations
 
+import os
 import re
 
 # Phrases that signal the user wants a human. Matched case-insensitively as
@@ -43,12 +44,13 @@ _HANDOFF_WORDS: tuple[str, ...] = (
     "representante",
 )
 
-# Sent once when a conversation enters handoff. English default to match the
-# engine's other built-in copy; override per deployment until per-tenant
-# messages exist.
-HANDOFF_ACK_MESSAGE = (
-    "Got it — I'm connecting you with a team member. "
-    "They'll reply right here shortly."
+# Sent once when a conversation enters handoff. This is end-customer copy, so
+# it follows the deployment's customer language (Spanish for current tenants).
+# Override per deployment via HANDOFF_ACK_MESSAGE until per-tenant messages
+# exist.
+HANDOFF_ACK_MESSAGE = os.environ.get(
+    "HANDOFF_ACK_MESSAGE",
+    "¡Claro! Te comunico con una persona del equipo. En breve te responden por aquí.",
 )
 
 

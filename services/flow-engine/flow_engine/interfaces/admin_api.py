@@ -137,6 +137,30 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
     dry_executor = copy.copy(executor)
     dry_executor._meta_send = recording_client
 
+    # Dry runs must never persist real appointments — record them instead.
+    class _RecordingAppointmentRepo:
+        def __init__(self) -> None:
+            self.created: list[dict[str, Any]] = []
+
+        def create(self, tenant_id, wa_id, customer_name, service, appointment_date) -> None:
+            self.created.append(
+                {
+                    "customer_name": customer_name,
+                    "service": service,
+                    "appointment_date": appointment_date,
+                }
+            )
+
+    recording_appointments = _RecordingAppointmentRepo()
+    dry_executor._appointment_repo = recording_appointments
+
+    # Dry runs must not pollute the real conversation history either.
+    class _NoopConvLog:
+        def write(self, turn: Any) -> None:
+            pass
+
+    dry_executor._conv_log_repo = _NoopConvLog()
+
     now = datetime.now(timezone.utc).isoformat()
     session = session_repo.load(body.tenant_id, body.simulated_wa_id)
     if session is None:
@@ -159,6 +183,7 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
         "current_node": session.current_node,
         "slots": session.slots,
         "sent": recording_client.sent,
+        "appointments": recording_appointments.created,
     }
 
 
@@ -218,6 +243,34 @@ def handoff_send(tenant_id: str, wa_id: str, body: HandoffSendRequest) -> dict[s
     )
     logger.info("Agent reply sent", extra={"tenant_id": tenant_id, "wa_id": wa_id})
     return {"status": "sent"}
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/takeover",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_takeover(tenant_id: str, wa_id: str) -> dict[str, str]:
+    """Pause the bot so a human agent owns the conversation from now on."""
+    from datetime import datetime, timezone
+
+    from flow_engine.domain.models import Session
+
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+
+    session = session_repo.load(tenant_id, wa_id)
+    if session is None:
+        session = Session.new(tenant_id, wa_id, datetime.now(timezone.utc).isoformat())
+
+    session.state = "HUMAN_HANDOFF"
+    session.flow_id = None
+    session.current_node = None
+    session.slots = {}
+    session.retry_count = 0
+    session_repo.save(session)
+    logger.info("Conversation taken over via admin", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "taken_over"}
 
 
 @app.post(

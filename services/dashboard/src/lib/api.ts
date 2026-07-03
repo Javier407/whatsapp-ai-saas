@@ -103,6 +103,7 @@ export type FlowNodeDto = {
     | "rag_lookup"
     | "llm_generate"
     | "api_call"
+    | "book_appointment"
     | "end";
   config: Record<string, unknown>;
   transitions: Array<{ next: string; condition?: string }>;
@@ -212,6 +213,36 @@ export const conversations = {
   resume: (waId: string) =>
     request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/resume`, {
       method: "POST",
+    }),
+  takeover: (waId: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/takeover`, {
+      method: "POST",
+    }),
+};
+
+// ── Appointments ──────────────────────────────────────────────────────────────
+
+export type Appointment = {
+  id: string;
+  wa_id: string;
+  customer_name: string | null;
+  service: string | null;
+  appointment_date: string | null;
+  status: string;
+  created_at: string;
+};
+
+export const appointments = {
+  list: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<Appointment[]>(`/appointments?${qs}`);
+  },
+  updateStatus: (id: string, status: string) =>
+    request<Appointment>(`/appointments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
     }),
 };
 

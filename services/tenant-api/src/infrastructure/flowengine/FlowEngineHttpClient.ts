@@ -107,6 +107,27 @@ export class FlowEngineHttpClient implements IFlowEngineClient {
     }
   }
 
+  async takeoverHandoff(tenantId: string, waId: string): Promise<void> {
+    const url = `${this.baseUrl}/admin/handoff/${tenantId}/${encodeURIComponent(waId)}/takeover`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Internal-Token': this.internalToken,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      throw new ExternalServiceError('flow-engine', `takeover failed: ${m}`);
+    }
+
+    if (!res.ok) {
+      throw new ExternalServiceError('flow-engine', `takeover returned ${res.status}`);
+    }
+  }
+
   async getSessionState(tenantId: string, waId: string): Promise<SessionStateResult> {
     const url = `${this.baseUrl}/admin/sessions/${tenantId}/${encodeURIComponent(waId)}/state`;
     let res: Response;

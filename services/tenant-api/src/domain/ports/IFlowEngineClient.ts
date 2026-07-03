@@ -16,6 +16,8 @@ export interface IFlowEngineClient {
   sendAgentReply(tenantId: string, waId: string, message: string): Promise<void>;
   /** Hand the conversation back to the bot (clear HUMAN_HANDOFF). */
   resumeHandoff(tenantId: string, waId: string): Promise<void>;
+  /** Pause the bot so a human agent owns the conversation. */
+  takeoverHandoff(tenantId: string, waId: string): Promise<void>;
   /** Current session state for a conversation (drives the agent inbox UI). */
   getSessionState(tenantId: string, waId: string): Promise<SessionStateResult>;
 }

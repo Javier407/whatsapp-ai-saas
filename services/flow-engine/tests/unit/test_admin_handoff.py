@@ -136,6 +136,29 @@ class TestHandoffResume:
         assert resp.json()["status"] == "no_session"
 
 
+class TestHandoffTakeover:
+    def test_takeover_pauses_bot(self, client: TestClient) -> None:
+        session = Session.new(_TENANT, _WA, "2026-01-01T00:00:00+00:00")
+        repo = FakeSessionRepo(session)
+        admin_api._state["session_repo"] = repo
+
+        resp = client.post(f"/admin/handoff/{_TENANT}/{_WA}/takeover", headers=_AUTH)
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "taken_over"
+        assert repo.saved[0].state == "HUMAN_HANDOFF"
+
+    def test_takeover_creates_session_when_missing(self, client: TestClient) -> None:
+        repo = FakeSessionRepo(None)
+        admin_api._state["session_repo"] = repo
+
+        resp = client.post(f"/admin/handoff/{_TENANT}/{_WA}/takeover", headers=_AUTH)
+
+        assert resp.status_code == 200
+        assert repo.saved[0].state == "HUMAN_HANDOFF"
+        assert repo.saved[0].wa_id == _WA
+
+
 class TestSessionState:
     def test_reports_handoff(self, client: TestClient) -> None:
         admin_api._state["session_repo"] = FakeSessionRepo(_handed_off_session())
