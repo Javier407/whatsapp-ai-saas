@@ -192,6 +192,24 @@ services:
         condition: service_healthy
 
   # -------------------------------------------------------------------------
+  # ngrok — stable public tunnel so Meta can reach the gateway webhook.
+  # Forwards the reserved domain (NGROK_DOMAIN) to gateway:3000 over the
+  # internal network. restart: unless-stopped keeps the webhook ingress up
+  # across crashes and reboots; with Docker Desktop set to start on login it
+  # survives machine restarts too. Requires NGROK_AUTHTOKEN + NGROK_DOMAIN in
+  # infra/.env. Do NOT also run `ngrok http` by hand — ngrok free allows one
+  # agent session at a time.
+  # -------------------------------------------------------------------------
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    command: ["http", "--url=${NGROK_DOMAIN}", "gateway:3000"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      - gateway
+
+  # -------------------------------------------------------------------------
   # tenant-api — back-office REST API
   # -------------------------------------------------------------------------
   tenant-api:
