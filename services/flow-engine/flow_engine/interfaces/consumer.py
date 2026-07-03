@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import socket
 import time
 from datetime import datetime, timezone
@@ -39,7 +40,38 @@ _XCLAIM_IDLE_MS = 10 * 60 * 1_000
 _XCLAIM_CHECK_INTERVAL_S = 60
 _READ_COUNT = 5
 _RATE_LIMIT = 30     # messages per minute per tenant
-_RATE_LIMIT_MSG = "I'm temporarily busy. Please try again in a minute."
+
+# Customer-facing copy → Spanish default (deployment language), env-overridable.
+_RATE_LIMIT_MSG = os.environ.get(
+    "RATE_LIMIT_MESSAGE",
+    "Estamos recibiendo muchos mensajes. Danos un minuto y volvemos contigo.",
+)
+
+# Messages older than this are dropped without a reply. Meta retries webhook
+# delivery for hours while the stack is down, so on startup a burst of stale
+# messages arrives at once; answering them (or rate-limit-spamming the
+# customer) hours later is worse than staying silent.
+_MAX_MESSAGE_AGE_S = int(os.environ.get("MESSAGE_MAX_AGE_SECONDS", "900"))
+
+
+def _is_stale(timestamp: str, now: float | None = None) -> bool:
+    """True if the inbound message is older than _MAX_MESSAGE_AGE_S.
+
+    Accepts Meta's unix-seconds strings ("1716224041") and ISO-8601 datetimes.
+    Unparseable timestamps are treated as fresh (better to over-answer than to
+    silently drop live traffic on a format change).
+    """
+    if not timestamp:
+        return False
+    now_s = now if now is not None else time.time()
+    try:
+        if timestamp.isdigit():
+            msg_s = float(timestamp)
+        else:
+            msg_s = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
+    except (ValueError, OverflowError):
+        return False
+    return (now_s - msg_s) > _MAX_MESSAGE_AGE_S
 
 
 class FlowEngineConsumer:
@@ -167,18 +199,29 @@ class FlowEngineConsumer:
             self._ack(stream_key, message_id)
             return
 
+        # 2b. Staleness guard: drop backlog messages delivered long after they
+        # were sent (Meta retries for hours while the stack is down). No reply.
+        if _is_stale(msg.timestamp):
+            logger.info("Stale message — dropping without reply", extra=log_extra)
+            mark_processed(self._redis, message_id)
+            self._ack(stream_key, message_id)
+            return
+
         # 3. Rate limit
         if not self._check_rate_limit(msg.tenant_id):
             logger.warning("Rate limit exceeded", extra={"tenant_id": msg.tenant_id})
-            try:
-                self._meta_send.send_text(
-                    phone_number_id=msg.phone_number_id,
-                    to=msg.wa_id,
-                    text=_RATE_LIMIT_MSG,
-                    access_token=msg.access_token,
-                )
-            except Exception:
-                logger.exception("Failed to send rate-limit notice", extra=log_extra)
+            # Notify the customer at most once per minute — a burst must not
+            # turn into a wall of identical "busy" messages.
+            if self._should_send_rate_notice(msg.tenant_id, msg.wa_id):
+                try:
+                    self._meta_send.send_text(
+                        phone_number_id=msg.phone_number_id,
+                        to=msg.wa_id,
+                        text=_RATE_LIMIT_MSG,
+                        access_token=msg.access_token,
+                    )
+                except Exception:
+                    logger.exception("Failed to send rate-limit notice", extra=log_extra)
             self._ack(stream_key, message_id)
             return
 
@@ -219,6 +262,16 @@ class FlowEngineConsumer:
         # 12. ACK
         self._ack(stream_key, message_id)
         logger.info("Message processed", extra=log_extra)
+
+    def _should_send_rate_notice(self, tenant_id: str, wa_id: str) -> bool:
+        """True only for the first over-limit message per contact per minute."""
+        # Key stays under rate:tenant:* so the flow_engine_user ACL allows it.
+        key = f"rate:tenant:{tenant_id}:notice:{wa_id}"
+        try:
+            return bool(self._redis.set(key, "1", nx=True, ex=60))
+        except redis.RedisError:
+            logger.exception("Rate-notice dedupe failed — suppressing notice")
+            return False
 
     def _check_rate_limit(self, tenant_id: str) -> bool:
         minute_bucket = math.floor(time.time() / 60)
