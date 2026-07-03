@@ -72,7 +72,7 @@ describe('RegisterUseCase', () => {
     const useCase = new RegisterUseCase(tenantRepo, makeFakeUserRepo());
 
     await expect(
-      useCase.execute({ tenantName: 'Acme', email: 'a@b.com', password: 'password123' }),
+      useCase.execute({ tenantName: 'Acme', email: 'a@b.com', password: 'password12345' }),
     ).rejects.toThrow(ConflictError);
   });
 

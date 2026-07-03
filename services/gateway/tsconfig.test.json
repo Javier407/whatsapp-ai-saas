@@ -3,8 +3,13 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist-test",
-    "module": "CommonJS",
-    "moduleResolution": "Node"
+    // Must stay ESM. package.json is "type": "module" and jest runs ts-jest
+    // with useESM: true; emitting CommonJS here produces `exports.x = ...`,
+    // which throws "exports is not defined" under the ESM VM.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // Required by ts-jest when module is NodeNext (per-file transpilation).
+    "isolatedModules": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }
