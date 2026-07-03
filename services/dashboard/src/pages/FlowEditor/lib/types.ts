@@ -6,6 +6,7 @@ export type NodeType =
   | "rag_lookup"
   | "llm_generate"
   | "api_call"
+  | "book_appointment"
   | "end";
 
 /** What the Inspector is currently editing. */

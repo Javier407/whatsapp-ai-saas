@@ -13,6 +13,7 @@ import { ConditionForm } from "./forms/ConditionForm";
 import { RagLookupForm } from "./forms/RagLookupForm";
 import { LlmGenerateForm } from "./forms/LlmGenerateForm";
 import { ApiCallForm } from "./forms/ApiCallForm";
+import { BookAppointmentForm } from "./forms/BookAppointmentForm";
 import { EndForm } from "./forms/EndForm";
 import { NODE_REGISTRY } from "./lib/node-registry";
 import type { NodeData, EdgeData } from "./lib/mapping";
@@ -26,6 +27,7 @@ const FORM_MAP: Record<NodeType, ComponentType<ConfigFormProps>> = {
   rag_lookup: RagLookupForm,
   llm_generate: LlmGenerateForm,
   api_call: ApiCallForm,
+  book_appointment: BookAppointmentForm,
   end: EndForm,
 };
 

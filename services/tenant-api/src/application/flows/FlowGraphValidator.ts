@@ -13,6 +13,7 @@ const ALLOWED_NODE_TYPES = new Set([
   'rag_lookup',
   'llm_generate',
   'api_call',
+  'book_appointment',
   'end',
 ]);
 

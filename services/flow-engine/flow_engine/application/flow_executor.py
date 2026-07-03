@@ -15,7 +15,14 @@ from flow_engine.application.node_executors import ExecutorDeps, NodeResult, exe
 from flow_engine.application.trigger_matcher import match_trigger
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
 from flow_engine.domain.models import ConversationTurn, Flow, InboundMessage, Session
-from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSendPort, IVectorStore
+from flow_engine.domain.ports import (
+    IAppointmentRepo,
+    IConvLogRepo,
+    IFlowRepo,
+    ILLMPort,
+    IMetaSendPort,
+    IVectorStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +40,14 @@ class FlowExecutor:
         vector_store: IVectorStore,
         llm: ILLMPort,
         conv_log_repo: IConvLogRepo,
+        appointment_repo: IAppointmentRepo | None = None,
     ) -> None:
         self._flow_repo = flow_repo
         self._meta_send = meta_send
         self._vector_store = vector_store
         self._llm = llm
         self._conv_log_repo = conv_log_repo
+        self._appointment_repo = appointment_repo
 
     def execute(self, message: InboundMessage, session: Session) -> None:
         """Process one inbound message, mutating *session* in place."""
@@ -66,6 +75,7 @@ class FlowExecutor:
             llm=self._llm,
             phone_number_id=message.phone_number_id,
             access_token=message.access_token,
+            appointments=self._appointment_repo,
         )
 
         active_flows = self._flow_repo.get_active_flows(message.tenant_id)

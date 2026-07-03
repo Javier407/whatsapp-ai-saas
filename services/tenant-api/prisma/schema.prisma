@@ -174,3 +174,17 @@ model WorkerHeartbeat {
 
   @@map("worker_heartbeats")
 }
+
+model Appointment {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  waId            String   @map("wa_id")
+  customerName    String?  @map("customer_name")
+  service         String?
+  appointmentDate String?  @map("appointment_date")
+  status          String   @default("pendiente")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tenantId, createdAt(sort: Desc)], map: "idx_appointments_tenant_time")
+  @@map("appointments")
+}

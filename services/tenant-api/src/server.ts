@@ -10,6 +10,10 @@ import { PrismaUserRepo } from './infrastructure/prisma/PrismaUserRepo.js';
 import { PrismaFlowRepo } from './infrastructure/prisma/PrismaFlowRepo.js';
 import { PrismaKbDocumentRepo } from './infrastructure/prisma/PrismaKbDocumentRepo.js';
 import { PrismaConvLogRepo } from './infrastructure/prisma/PrismaConvLogRepo.js';
+import { PrismaAppointmentRepo } from './infrastructure/prisma/PrismaAppointmentRepo.js';
+import { ListAppointmentsUseCase } from './application/appointments/ListAppointmentsUseCase.js';
+import { UpdateAppointmentStatusUseCase } from './application/appointments/UpdateAppointmentStatusUseCase.js';
+import { appointmentsRoutes } from './interfaces/http/routes/appointments.routes.js';
 import { MinioStorageAdapter } from './infrastructure/storage/MinioStorageAdapter.js';
 import { RedisIndexingQueue } from './infrastructure/redis/RedisIndexingQueue.js';
 import { FlowEngineHttpClient } from './infrastructure/flowengine/FlowEngineHttpClient.js';
@@ -118,6 +122,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   const deleteDocumentUseCase = new DeleteDocumentUseCase(kbRepo, storage, queue);
   const listConversationsUseCase = new ListConversationsUseCase(convLogRepo);
   const dryRunUseCase = new DryRunUseCase(flowEngineClient);
+  const appointmentRepo = new PrismaAppointmentRepo(prisma);
+  const listAppointmentsUseCase = new ListAppointmentsUseCase(appointmentRepo);
+  const updateAppointmentStatusUseCase = new UpdateAppointmentStatusUseCase(appointmentRepo);
 
   // ---------------------------------------------------------------------------
   // Routes
@@ -164,6 +171,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(dryrunRoutes, {
         prefix: '/dry-run',
         dryRunUseCase,
+      });
+
+      await api.register(appointmentsRoutes, {
+        prefix: '/appointments',
+        listAppointmentsUseCase,
+        updateAppointmentStatusUseCase,
       });
 
       // Health checks

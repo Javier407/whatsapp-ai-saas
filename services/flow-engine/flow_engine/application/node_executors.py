@@ -21,7 +21,7 @@ import jmespath
 
 from flow_engine.domain.errors import NodeExecutionError
 from flow_engine.domain.models import FlowNode, Session
-from flow_engine.domain.ports import ILLMPort, IMetaSendPort, IVectorStore
+from flow_engine.domain.ports import IAppointmentRepo, ILLMPort, IMetaSendPort, IVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ class ExecutorDeps:
     llm: ILLMPort
     phone_number_id: str
     access_token: str
+    appointments: IAppointmentRepo | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +368,56 @@ def execute_api_call(
     )
 
 
+def execute_book_appointment(
+    node: FlowNode,
+    session: Session,
+    message_text: str,
+    deps: ExecutorDeps,
+) -> NodeResult:
+    """Persist an appointment from session slots, then optionally confirm.
+
+    Config:
+      customer_name_slot: slot holding the customer's name  (default "customer_name")
+      service_slot:       slot holding the requested service (default "service")
+      date_slot:          slot holding the requested date    (default "appointment_date")
+      confirmation:       optional message sent after booking; slots interpolate
+    """
+    if deps.appointments is None:
+        raise NodeExecutionError(node.id, "Appointment repository not configured")
+
+    config = node.config
+    customer_name = session.slots.get(config.get("customer_name_slot", "customer_name"))
+    service = session.slots.get(config.get("service_slot", "service"))
+    appointment_date = session.slots.get(config.get("date_slot", "appointment_date"))
+
+    try:
+        deps.appointments.create(
+            tenant_id=session.tenant_id,
+            wa_id=session.wa_id,
+            customer_name=str(customer_name) if customer_name is not None else None,
+            service=str(service) if service is not None else None,
+            appointment_date=str(appointment_date) if appointment_date is not None else None,
+        )
+    except Exception as exc:
+        raise NodeExecutionError(node.id, f"Failed to book appointment: {exc}")
+
+    confirmation: str | None = config.get("confirmation")
+    if confirmation:
+        try:
+            confirmation = confirmation.format_map(session.slots)
+        except (KeyError, ValueError):
+            pass
+        deps.meta_send.send_text(
+            phone_number_id=deps.phone_number_id,
+            to=session.wa_id,
+            text=confirmation,
+            access_token=deps.access_token,
+        )
+
+    next_node = _first_transition(node, session)
+    return NodeResult(reply=confirmation, next_node=next_node)
+
+
 def execute_end(
     node: FlowNode,
     session: Session,
@@ -403,6 +454,7 @@ _EXECUTORS = {
     "rag_lookup": execute_rag_lookup,
     "llm_generate": execute_llm_generate,
     "api_call": execute_api_call,
+    "book_appointment": execute_book_appointment,
     "end": execute_end,
 }
 

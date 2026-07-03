@@ -6,6 +6,7 @@ import { LoginPage } from "@/pages/login/LoginPage";
 import { FlowsPage } from "@/pages/flows/FlowsPage";
 import { KbPage } from "@/pages/kb/KbPage";
 import { ConversationsPage } from "@/pages/conversations/ConversationsPage";
+import { AppointmentsPage } from "@/pages/appointments/AppointmentsPage";
 import { SettingsPage } from "@/pages/settings/SettingsPage";
 import { type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
@@ -33,6 +34,7 @@ function AppRoutes() {
                 <Route path="flows" element={<FlowsPage />} />
                 <Route path="kb" element={<KbPage />} />
                 <Route path="conversations" element={<ConversationsPage />} />
+                <Route path="appointments" element={<AppointmentsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Routes>
             </Shell>

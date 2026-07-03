@@ -7,6 +7,7 @@ import {
   Database,
   Sparkles,
   Globe,
+  CalendarDays,
   StopCircle,
 } from "lucide-react";
 import type { NodeType } from "./types";
@@ -17,6 +18,7 @@ import { ConditionNode } from "../nodes/ConditionNode";
 import { RagLookupNode } from "../nodes/RagLookupNode";
 import { LlmGenerateNode } from "../nodes/LlmGenerateNode";
 import { ApiCallNode } from "../nodes/ApiCallNode";
+import { BookAppointmentNode } from "../nodes/BookAppointmentNode";
 import { EndNode } from "../nodes/EndNode";
 
 /** Per-node-type metadata: palette label, icon, accent color, and the default
@@ -32,6 +34,7 @@ export const NODE_REGISTRY: Record<
   rag_lookup: { label: "Buscar en KB", icon: Database, color: "text-teal-500", defaultConfig: { query_template: "{{message}}", top_k: 3, slot_name: "context" } },
   llm_generate: { label: "Generar con IA", icon: Sparkles, color: "text-green-600", defaultConfig: { system_prompt: "", user_prompt_template: "", max_tokens: 256, temperature: 0.2 } },
   api_call: { label: "Llamada API", icon: Globe, color: "text-orange-500", defaultConfig: { url: "", method: "GET", headers: {} } },
+  book_appointment: { label: "Agendar cita", icon: CalendarDays, color: "text-rose-500", defaultConfig: { customer_name_slot: "customer_name", service_slot: "service", date_slot: "appointment_date", confirmation: "" } },
   end: { label: "Fin", icon: StopCircle, color: "text-slate-500", defaultConfig: {} },
 };
 
@@ -45,5 +48,6 @@ export const NODE_TYPES_MAP: Record<string, ComponentType<any>> = {
   rag_lookup: RagLookupNode,
   llm_generate: LlmGenerateNode,
   api_call: ApiCallNode,
+  book_appointment: BookAppointmentNode,
   end: EndNode,
 };
