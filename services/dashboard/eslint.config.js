@@ -18,5 +18,23 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Allow underscore-prefixed args to mark intentionally unused props.
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // shadcn/ui primitives and the auth/shell providers intentionally export
+    // variants/hooks next to their components; fast-refresh purity does not
+    // apply to these shared building blocks.
+    files: [
+      'src/components/ui/**/*.{ts,tsx}',
+      'src/lib/auth.tsx',
+      'src/components/layout/Shell.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
+    },
   },
 ])

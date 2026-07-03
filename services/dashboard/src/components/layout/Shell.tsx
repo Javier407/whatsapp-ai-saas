@@ -5,6 +5,7 @@ import {
   GitBranch,
   BookOpen,
   MessageSquare,
+  CalendarDays,
   Settings,
   LogOut,
   PanelLeftClose,
@@ -25,6 +26,7 @@ const nav = [
   { to: "/flows", label: "Flujos", icon: GitBranch },
   { to: "/kb", label: "Base de conocimiento", icon: BookOpen },
   { to: "/conversations", label: "Conversaciones", icon: MessageSquare },
+  { to: "/appointments", label: "Citas", icon: CalendarDays },
   { to: "/settings", label: "Ajustes", icon: Settings },
 ] as const;
 
@@ -32,6 +34,7 @@ const pageTitles: Record<string, string> = {
   "/flows": "Flujos",
   "/kb": "Base de conocimiento",
   "/conversations": "Conversaciones",
+  "/appointments": "Citas",
   "/settings": "Ajustes",
 };
 
@@ -75,7 +78,7 @@ export function Shell({
     queryFn: tenant.get,
   });
 
-  const connected = Boolean(tenantData?.phone_number_id);
+  const connected = Boolean(tenantData?.whatsapp?.connected ?? tenantData?.phone_number_id);
   const pageTitle = pageTitles[pathname] ?? "Panel";
 
   const ctxVariant = useContext(ShellVariantContext);
@@ -92,10 +95,6 @@ export function Shell({
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   function handleLogout() {
     logout();
@@ -133,6 +132,7 @@ export function Shell({
             key={to}
             to={to}
             title={collapsed ? label : undefined}
+            onClick={() => setMobileOpen(false)}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2 rounded-md py-2 text-sm font-medium transition-colors",
