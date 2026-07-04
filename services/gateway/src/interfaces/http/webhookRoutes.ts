@@ -50,7 +50,11 @@ export async function webhookRoutes(
         (req as FastifyRequest & { rawBody?: Buffer }).rawBody = body as Buffer;
         done(null, parsed);
       } catch (err) {
-        done(err instanceof Error ? err : new Error(String(err)));
+        // Malformed JSON is a client error, not a server error. Without an
+        // explicit statusCode Fastify would surface a parser failure as 500.
+        const parseError = err instanceof Error ? err : new Error(String(err));
+        (parseError as Error & { statusCode?: number }).statusCode = 400;
+        done(parseError);
       }
     },
   );

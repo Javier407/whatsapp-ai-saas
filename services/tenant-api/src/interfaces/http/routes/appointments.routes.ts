@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ListAppointmentsUseCase } from '../../../application/appointments/ListAppointmentsUseCase.js';
 import type { UpdateAppointmentStatusUseCase } from '../../../application/appointments/UpdateAppointmentStatusUseCase.js';
-import { ok, sendDomainError } from '../reply.js';
+import { ok, sendDomainError, parseOptionalInt, isUuid } from '../reply.js';
+import { NotFoundError } from '../../../domain/errors.js';
 
 interface AppointmentRoutesDeps {
   listAppointmentsUseCase: ListAppointmentsUseCase;
@@ -22,8 +23,8 @@ export const appointmentsRoutes: FastifyPluginAsync<AppointmentRoutesDeps> = asy
       const result = await opts.listAppointmentsUseCase.execute({
         tenantId: request.tenantId,
         status: request.query.status,
-        limit: request.query.limit ? parseInt(request.query.limit, 10) : undefined,
-        offset: request.query.offset ? parseInt(request.query.offset, 10) : undefined,
+        limit: parseOptionalInt(request.query.limit, 'limit'),
+        offset: parseOptionalInt(request.query.offset, 'offset'),
       });
 
       ok(
@@ -49,6 +50,9 @@ export const appointmentsRoutes: FastifyPluginAsync<AppointmentRoutesDeps> = asy
     Body: { status: string };
   }>('/:id', async (request, reply) => {
     try {
+      if (!isUuid(request.params.id)) {
+        throw new NotFoundError('Appointment', request.params.id);
+      }
       const updated = await opts.updateAppointmentStatusUseCase.execute(
         request.tenantId,
         request.params.id,

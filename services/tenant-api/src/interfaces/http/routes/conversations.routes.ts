@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ListConversationsUseCase } from '../../../application/conversations/ListConversationsUseCase.js';
 import type { IFlowEngineClient } from '../../../domain/ports/IFlowEngineClient.js';
-import { ok, sendDomainError } from '../reply.js';
+import { ok, sendDomainError, parseOptionalInt } from '../reply.js';
 
 interface ConversationRoutesDeps {
   listConversationsUseCase: ListConversationsUseCase;
@@ -30,8 +30,8 @@ export const conversationsRoutes: FastifyPluginAsync<ConversationRoutesDeps> = a
         waId: request.query.wa_id,
         from: request.query.from,
         to: request.query.to,
-        limit: request.query.limit ? parseInt(request.query.limit, 10) : undefined,
-        offset: request.query.offset ? parseInt(request.query.offset, 10) : undefined,
+        limit: parseOptionalInt(request.query.limit, 'limit'),
+        offset: parseOptionalInt(request.query.offset, 'offset'),
       });
 
       ok(
