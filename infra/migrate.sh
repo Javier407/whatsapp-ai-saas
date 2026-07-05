@@ -57,6 +57,7 @@ if command -v psql >/dev/null 2>&1; then
       --username="${PGUSER}" \
       --dbname="${PGDATABASE}" \
       --variable=ON_ERROR_STOP=1 \
+      --variable=db_password="${PGPASSWORD}" \
       --file="$1"
   }
 else
@@ -64,7 +65,7 @@ else
   run_migration() {
     docker compose -f "${COMPOSE_FILE}" exec -T postgres \
       psql --username="${PGUSER}" --dbname="${PGDATABASE}" \
-      --variable=ON_ERROR_STOP=1 < "$1"
+      --variable=ON_ERROR_STOP=1 --variable=db_password="${PGPASSWORD}" < "$1"
   }
 fi
 
