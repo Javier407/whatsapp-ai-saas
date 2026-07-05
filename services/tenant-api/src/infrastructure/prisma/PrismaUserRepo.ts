@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { IUserRepo, CreateUserInput } from '../../domain/ports/IUserRepo.js';
 import type { User } from '../../domain/models/User.js';
-import { tenantContext } from './tenantContext.js';
+import { withRls } from './withRls.js';
 
 function mapUser(row: {
   id: string;
@@ -35,25 +35,33 @@ export class PrismaUserRepo implements IUserRepo {
   // tenantId we already have — otherwise RLS (under the non-superuser runtime
   // role) blocks the row and login/register silently fail.
   async findByEmailAndTenant(email: string, tenantId: string): Promise<User | null> {
-    return tenantContext.run(tenantId, async () => {
-      const row = await this.prisma.user.findUnique({
-        where: { tenantId_email: { tenantId, email } },
-      });
-      return row ? mapUser(row) : null;
-    });
+    return withRls(
+      this.prisma,
+      async (tx) => {
+        const row = await tx.user.findUnique({
+          where: { tenantId_email: { tenantId, email } },
+        });
+        return row ? mapUser(row) : null;
+      },
+      tenantId,
+    );
   }
 
   async create(input: CreateUserInput): Promise<User> {
-    return tenantContext.run(input.tenantId, async () => {
-      const row = await this.prisma.user.create({
-        data: {
-          tenantId: input.tenantId,
-          email: input.email,
-          passwordHash: input.passwordHash,
-          role: input.role as never,
-        },
-      });
-      return mapUser(row);
-    });
+    return withRls(
+      this.prisma,
+      async (tx) => {
+        const row = await tx.user.create({
+          data: {
+            tenantId: input.tenantId,
+            email: input.email,
+            passwordHash: input.passwordHash,
+            role: input.role as never,
+          },
+        });
+        return mapUser(row);
+      },
+      input.tenantId,
+    );
   }
 }

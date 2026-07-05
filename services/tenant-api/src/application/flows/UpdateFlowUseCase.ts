@@ -25,7 +25,7 @@ export class UpdateFlowUseCase {
     const entryNode = input.entryNode ?? existing.entryNode;
     this.validator.validate({ entryNode, nodes });
 
-    const updated = await this.flowRepo.createNewVersion(flowId, input);
+    const updated = await this.flowRepo.createNewVersion(tenantId, flowId, input);
 
     this.flowEngineClient.reloadTenantFlows(tenantId).catch(() => undefined);
 

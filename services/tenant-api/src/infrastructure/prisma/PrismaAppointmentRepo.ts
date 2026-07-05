@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { IAppointmentRepo, ListAppointmentsFilter } from '../../domain/ports/IAppointmentRepo.js';
 import type { Appointment } from '../../domain/models/Appointment.js';
+import { withRls } from './withRls.js';
 
 function mapRow(row: {
   id: string;
@@ -33,27 +34,38 @@ export class PrismaAppointmentRepo implements IAppointmentRepo {
       ...(filter.status && { status: filter.status }),
     };
 
-    const [rows, total] = await Promise.all([
-      this.prisma.appointment.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: filter.offset,
-        take: filter.limit,
-      }),
-      this.prisma.appointment.count({ where }),
-    ]);
+    const [rows, total] = await withRls(
+      this.prisma,
+      (tx) =>
+        Promise.all([
+          tx.appointment.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip: filter.offset,
+            take: filter.limit,
+          }),
+          tx.appointment.count({ where }),
+        ]),
+      filter.tenantId,
+    );
 
     return { data: rows.map(mapRow), total };
   }
 
   async updateStatus(tenantId: string, id: string, status: string): Promise<Appointment | null> {
-    // updateMany so the tenantId filter applies (defense in depth on top of RLS)
-    const result = await this.prisma.appointment.updateMany({
-      where: { id, tenantId },
-      data: { status },
-    });
-    if (result.count === 0) return null;
-    const row = await this.prisma.appointment.findFirst({ where: { id, tenantId } });
-    return row ? mapRow(row) : null;
+    return withRls(
+      this.prisma,
+      async (tx) => {
+        // updateMany so the tenantId filter applies (defense in depth on top of RLS)
+        const result = await tx.appointment.updateMany({
+          where: { id, tenantId },
+          data: { status },
+        });
+        if (result.count === 0) return null;
+        const row = await tx.appointment.findFirst({ where: { id, tenantId } });
+        return row ? mapRow(row) : null;
+      },
+      tenantId,
+    );
   }
 }

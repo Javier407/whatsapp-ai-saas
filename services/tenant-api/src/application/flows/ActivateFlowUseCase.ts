@@ -15,7 +15,7 @@ export class ActivateFlowUseCase {
 
     // Deactivate other flows with overlapping triggers before activating this one
     await this.flowRepo.deactivateByTrigger(tenantId, flowId);
-    const flow = await this.flowRepo.setActive(flowId, true);
+    const flow = await this.flowRepo.setActive(tenantId, flowId, true);
 
     this.flowEngineClient.reloadTenantFlows(tenantId).catch(() => undefined);
 

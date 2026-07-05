@@ -31,10 +31,11 @@ export interface IFlowRepo {
   findByIdForTenant(tenantId: string, flowId: string): Promise<FlowWithNodes | null>;
   listByTenant(tenantId: string): Promise<Flow[]>;
   create(input: CreateFlowInput): Promise<FlowWithNodes>;
-  /** Creates a new version of the flow; increments version number. */
-  createNewVersion(id: string, input: UpdateFlowInput): Promise<FlowWithNodes>;
-  setActive(id: string, isActive: boolean): Promise<Flow>;
+  /** Creates a new version of the flow; increments version number.
+   *  tenantId scopes the RLS transaction (the id-only lookup runs under RLS). */
+  createNewVersion(tenantId: string, id: string, input: UpdateFlowInput): Promise<FlowWithNodes>;
+  setActive(tenantId: string, id: string, isActive: boolean): Promise<Flow>;
   /** Deactivate all flows whose trigger overlaps with the given one. */
   deactivateByTrigger(tenantId: string, excludeId: string): Promise<void>;
-  delete(id: string): Promise<void>;
+  delete(tenantId: string, id: string): Promise<void>;
 }

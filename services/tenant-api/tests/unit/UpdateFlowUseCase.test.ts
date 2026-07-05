@@ -106,7 +106,7 @@ describe('UpdateFlowUseCase', () => {
     const result = await useCase.execute(OWNER_TENANT, EXISTING.id, input);
 
     expect(result).toBe(updated);
-    expect(createNewVersion).toHaveBeenCalledWith(EXISTING.id, input);
+    expect(createNewVersion).toHaveBeenCalledWith(OWNER_TENANT, EXISTING.id, input);
   });
 
   it('validates BEFORE persisting — an invalid merged graph throws and skips createNewVersion', async () => {

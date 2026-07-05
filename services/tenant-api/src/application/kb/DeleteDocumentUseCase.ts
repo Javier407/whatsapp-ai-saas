@@ -12,7 +12,7 @@ export class DeleteDocumentUseCase {
   ) {}
 
   async execute(tenantId: string, documentId: string): Promise<void> {
-    const doc = await this.kbRepo.findById(documentId);
+    const doc = await this.kbRepo.findById(tenantId, documentId);
     if (!doc || doc.tenantId !== tenantId) {
       throw new NotFoundError('KnowledgeBaseDocument', documentId);
     }
@@ -20,7 +20,7 @@ export class DeleteDocumentUseCase {
     // Delete from storage first; if DB delete fails the file is orphaned
     // but the DB record will block re-use. Acceptable for MVP.
     await this.storage.delete(doc.storageUri);
-    await this.kbRepo.delete(documentId);
+    await this.kbRepo.delete(tenantId, documentId);
 
     // Enqueue a deletion job so rag-indexer removes the vectors from ChromaDB.
     // Fire-and-forget: if the enqueue fails the vectors remain orphaned but

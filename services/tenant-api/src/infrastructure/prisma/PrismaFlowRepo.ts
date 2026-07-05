@@ -5,6 +5,7 @@ import type {
   UpdateFlowInput,
 } from '../../domain/ports/IFlowRepo.js';
 import type { Flow, FlowNode, FlowWithNodes, Transition } from '../../domain/models/Flow.js';
+import { withRls } from './withRls.js';
 
 function mapNode(row: {
   id: string;
@@ -66,31 +67,32 @@ export class PrismaFlowRepo implements IFlowRepo {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findById(id: string): Promise<FlowWithNodes | null> {
-    const row = await this.prisma.flow.findUnique({
-      where: { id },
-      include: { nodes: true },
-    });
+    const row = await withRls(this.prisma, (tx) =>
+      tx.flow.findUnique({ where: { id }, include: { nodes: true } }),
+    );
     return row ? mapFlowWithNodes(row) : null;
   }
 
   async findByIdForTenant(tenantId: string, flowId: string): Promise<FlowWithNodes | null> {
-    const row = await this.prisma.flow.findFirst({
-      where: { id: flowId, tenantId },
-      include: { nodes: true },
-    });
+    const row = await withRls(
+      this.prisma,
+      (tx) => tx.flow.findFirst({ where: { id: flowId, tenantId }, include: { nodes: true } }),
+      tenantId,
+    );
     return row ? mapFlowWithNodes(row) : null;
   }
 
   async listByTenant(tenantId: string): Promise<Flow[]> {
-    const rows = await this.prisma.flow.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const rows = await withRls(
+      this.prisma,
+      (tx) => tx.flow.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } }),
+      tenantId,
+    );
     return rows.map(mapFlow);
   }
 
   async create(input: CreateFlowInput): Promise<FlowWithNodes> {
-    const row = await this.prisma.flow.create({
+    const row = await withRls(this.prisma, (tx) => tx.flow.create({
       data: {
         tenantId: input.tenantId,
         name: input.name,
@@ -109,67 +111,79 @@ export class PrismaFlowRepo implements IFlowRepo {
         },
       },
       include: { nodes: true },
-    });
+    }), input.tenantId);
     return mapFlowWithNodes(row);
   }
 
-  async createNewVersion(id: string, input: UpdateFlowInput): Promise<FlowWithNodes> {
-    const existing = await this.prisma.flow.findUniqueOrThrow({
-      where: { id },
-      include: { nodes: true },
-    });
+  async createNewVersion(
+    tenantId: string,
+    id: string,
+    input: UpdateFlowInput,
+  ): Promise<FlowWithNodes> {
+    const row = await withRls(this.prisma, async (tx) => {
+      const existing = await tx.flow.findUniqueOrThrow({
+        where: { id },
+        include: { nodes: true },
+      });
 
-    const newVersion = existing.version + 1;
-    const nodes = input.nodes ?? existing.nodes.map((n) => ({
-      nodeKey: n.nodeKey,
-      type: n.type as FlowNode['type'],
-      config: n.config as Record<string, unknown>,
-      transitions: n.transitions as unknown as Transition[],
-      meta: n.meta as Record<string, unknown>,
-    }));
+      const newVersion = existing.version + 1;
+      const nodes = input.nodes ?? existing.nodes.map((n) => ({
+        nodeKey: n.nodeKey,
+        type: n.type as FlowNode['type'],
+        config: n.config as Record<string, unknown>,
+        transitions: n.transitions as unknown as Transition[],
+        meta: n.meta as Record<string, unknown>,
+      }));
 
-    const row = await this.prisma.flow.create({
-      data: {
-        tenantId: existing.tenantId,
-        name: input.name ?? existing.name,
-        description: input.description !== undefined ? input.description : existing.description,
-        trigger: (input.trigger ?? existing.trigger) as never,
-        entryNode: input.entryNode ?? existing.entryNode,
-        isActive: false,
-        version: newVersion,
-        nodes: {
-          create: nodes.map((n) => ({
-            tenantId: existing.tenantId,
-            nodeKey: n.nodeKey,
-            type: n.type as never,
-            config: n.config as never,
-            transitions: n.transitions as never,
-            ...(n.meta !== undefined ? { meta: n.meta as never } : {}),
-          })),
+      return tx.flow.create({
+        data: {
+          tenantId: existing.tenantId,
+          name: input.name ?? existing.name,
+          description: input.description !== undefined ? input.description : existing.description,
+          trigger: (input.trigger ?? existing.trigger) as never,
+          entryNode: input.entryNode ?? existing.entryNode,
+          isActive: false,
+          version: newVersion,
+          nodes: {
+            create: nodes.map((n) => ({
+              tenantId: existing.tenantId,
+              nodeKey: n.nodeKey,
+              type: n.type as never,
+              config: n.config as never,
+              transitions: n.transitions as never,
+              ...(n.meta !== undefined ? { meta: n.meta as never } : {}),
+            })),
+          },
         },
-      },
-      include: { nodes: true },
+        include: { nodes: true },
+      });
     });
 
     return mapFlowWithNodes(row);
   }
 
-  async setActive(id: string, isActive: boolean): Promise<Flow> {
-    const row = await this.prisma.flow.update({
-      where: { id },
-      data: { isActive, updatedAt: new Date() },
-    });
+  async setActive(tenantId: string, id: string, isActive: boolean): Promise<Flow> {
+    const row = await withRls(
+      this.prisma,
+      (tx) => tx.flow.update({ where: { id }, data: { isActive, updatedAt: new Date() } }),
+      tenantId,
+    );
     return mapFlow(row);
   }
 
   async deactivateByTrigger(tenantId: string, excludeId: string): Promise<void> {
-    await this.prisma.flow.updateMany({
-      where: { tenantId, isActive: true, id: { not: excludeId } },
-      data: { isActive: false, updatedAt: new Date() },
-    });
+    await withRls(
+      this.prisma,
+      (tx) =>
+        tx.flow.updateMany({
+          where: { tenantId, isActive: true, id: { not: excludeId } },
+          data: { isActive: false, updatedAt: new Date() },
+        }),
+      tenantId,
+    );
   }
 
-  async delete(id: string): Promise<void> {
-    await this.prisma.flow.delete({ where: { id } });
+  async delete(tenantId: string, id: string): Promise<void> {
+    await withRls(this.prisma, (tx) => tx.flow.delete({ where: { id } }), tenantId);
   }
 }

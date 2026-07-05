@@ -99,7 +99,7 @@ describe('DeleteFlowUseCase', () => {
     );
 
     await expect(useCase.execute(OWNER_TENANT, EXISTING.id)).resolves.toBeUndefined();
-    expect(del).toHaveBeenCalledWith(EXISTING.id);
+    expect(del).toHaveBeenCalledWith(OWNER_TENANT, EXISTING.id);
     expect(reloadTenantFlows).toHaveBeenCalledWith(OWNER_TENANT);
   });
 
@@ -113,6 +113,6 @@ describe('DeleteFlowUseCase', () => {
     );
 
     await expect(useCase.execute(OWNER_TENANT, EXISTING.id)).resolves.toBeUndefined();
-    expect(del).toHaveBeenCalledWith(EXISTING.id);
+    expect(del).toHaveBeenCalledWith(OWNER_TENANT, EXISTING.id);
   });
 });

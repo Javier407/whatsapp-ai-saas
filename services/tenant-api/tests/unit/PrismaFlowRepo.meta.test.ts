@@ -47,7 +47,14 @@ function flowRow(nodes: NodeRow[]) {
 
 function makeRepo(createReturn: ReturnType<typeof flowRow>) {
   const create = jest.fn(async () => createReturn);
-  const prisma = { flow: { create } } as unknown as PrismaClient;
+  // The repo now wraps writes in withRls -> prisma.$transaction(fn), running the
+  // query on the transaction client. Mock $transaction to invoke the callback
+  // with a tx that exposes the same flow.create spy + the SET LOCAL raw call.
+  const tx = { $executeRawUnsafe: jest.fn(async () => 0), flow: { create } };
+  const prisma = {
+    flow: { create },
+    $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+  } as unknown as PrismaClient;
   return { repo: new PrismaFlowRepo(prisma), create };
 }
 
@@ -57,7 +64,7 @@ describe('PrismaFlowRepo — meta column', () => {
     const { repo, create } = makeRepo(flowRow([nodeRow(position)]));
 
     const result = await repo.create({
-      tenantId: 'tenant-1',
+      tenantId: '11111111-1111-1111-1111-111111111111',
       name: 'F',
       trigger: {},
       entryNode: 'start',
@@ -75,7 +82,7 @@ describe('PrismaFlowRepo — meta column', () => {
     const { repo, create } = makeRepo(flowRow([nodeRow(null)]));
 
     const result = await repo.create({
-      tenantId: 'tenant-1',
+      tenantId: '11111111-1111-1111-1111-111111111111',
       name: 'F',
       trigger: {},
       entryNode: 'start',

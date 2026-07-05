@@ -106,7 +106,7 @@ describe('ActivateFlowUseCase', () => {
 
     expect(result).toBe(ACTIVATED);
     expect(deactivateByTrigger).toHaveBeenCalledWith(OWNER_TENANT, EXISTING.id);
-    expect(setActive).toHaveBeenCalledWith(EXISTING.id, true);
+    expect(setActive).toHaveBeenCalledWith(OWNER_TENANT, EXISTING.id, true);
     // Order matters: peers must be deactivated before this flow is set active,
     // otherwise two flows with the same trigger could be active at once.
     expect(deactivateByTrigger.mock.invocationCallOrder[0]!).toBeLessThan(
