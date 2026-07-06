@@ -9,7 +9,7 @@ Max tokens: hard-capped at 1000 — never exceeded regardless of node config.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -70,8 +70,10 @@ class LangChainLLMPort(ILLMPort):
 
         messages.append(HumanMessage(content=user_message))
 
-        llm = self._llm.with_config({"max_tokens": effective_max})
-        response = llm.invoke(messages)
+        llm = self._llm.with_config({"max_tokens": effective_max})  # type: ignore[arg-type]
+        # invoke() is typed as returning BaseMessage; at runtime it is an
+        # AIMessage, which carries usage_metadata.
+        response = cast(AIMessage, llm.invoke(messages))
 
         tokens: int = 0
         if response.usage_metadata:

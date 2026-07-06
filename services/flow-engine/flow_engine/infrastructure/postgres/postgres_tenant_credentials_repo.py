@@ -7,6 +7,7 @@ import time
 import psycopg2
 import psycopg2.extras
 
+from flow_engine.domain.ports import ITenantCredentialsRepo
 from flow_engine.infrastructure.crypto import decrypt_aes256_gcm
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL_S = 300.0
 
 
-class PostgresTenantCredentialsRepo:
+class PostgresTenantCredentialsRepo(ITenantCredentialsRepo):
     def __init__(self, connection_string: str, master_key: str) -> None:
         self._conn_string = connection_string
         self._master_key = master_key
