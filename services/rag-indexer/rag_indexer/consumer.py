@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import socket
 import time
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import redis
 
@@ -95,12 +95,17 @@ class IndexingConsumer:
 
         # XREADGROUP across all tenant streams
         try:
-            results: Optional[list[Any]] = self._redis.xreadgroup(
-                groupname=self.GROUP_NAME,
-                consumername=self.CONSUMER_NAME,
-                streams={k: ">" for k in stream_keys},
-                count=_READ_COUNT,
-                block=self.BLOCK_MS,
+            # Sync redis client: xreadgroup returns a list at runtime, but
+            # redis-py types it with the async union (Awaitable | T).
+            results: Optional[list[Any]] = cast(
+                "Optional[list[Any]]",
+                self._redis.xreadgroup(
+                    groupname=self.GROUP_NAME,
+                    consumername=self.CONSUMER_NAME,
+                    streams={k: ">" for k in stream_keys},
+                    count=_READ_COUNT,
+                    block=self.BLOCK_MS,
+                ),
             )
         except redis.RedisError:
             logger.exception("XREADGROUP error")
@@ -199,13 +204,16 @@ class IndexingConsumer:
         for stream_key in stream_keys:
             try:
                 # XAUTOCLAIM is available in Redis ≥ 6.2 and ioredis / redis-py ≥ 4
-                result = self._redis.xautoclaim(
-                    stream_key,
-                    self.GROUP_NAME,
-                    self.CONSUMER_NAME,
-                    self.XCLAIM_IDLE_MS,
-                    start_id="0-0",
-                    count=10,
+                result = cast(
+                    "list[Any]",
+                    self._redis.xautoclaim(
+                        stream_key,
+                        self.GROUP_NAME,
+                        self.CONSUMER_NAME,
+                        self.XCLAIM_IDLE_MS,
+                        start_id="0-0",
+                        count=10,
+                    ),
                 )
                 # result = (next_start_id, [(id, fields), ...], [deleted_ids])
                 claimed_messages = result[1] if result else []
@@ -231,7 +239,7 @@ class IndexingConsumer:
     def _discover_streams(self) -> list[str]:
         """Return all keys matching ``indexing:*``."""
         try:
-            keys = self._redis.keys(self.STREAM_PATTERN)
+            keys = cast("list[Any]", self._redis.keys(self.STREAM_PATTERN))
             return [k.decode() if isinstance(k, bytes) else k for k in keys]
         except redis.RedisError:
             logger.exception("Failed to discover streams")

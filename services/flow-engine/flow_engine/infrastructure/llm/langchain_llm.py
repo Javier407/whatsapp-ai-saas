@@ -13,6 +13,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from flow_engine.domain.ports import ILLMPort
 
@@ -28,9 +29,9 @@ class LangChainLLMPort(ILLMPort):
         model: str = "gpt-4o-mini",
     ) -> None:
         self._llm = ChatOpenAI(
-            api_key=openai_api_key,
+            api_key=SecretStr(openai_api_key),
             model=model,
-            max_tokens=500,      # default; overridden per call
+            max_tokens=500,  # type: ignore[call-arg]  # default; overridden per call
             temperature=0.3,
         )
 

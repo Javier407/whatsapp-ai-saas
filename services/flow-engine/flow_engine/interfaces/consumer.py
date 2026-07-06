@@ -18,7 +18,7 @@ import os
 import socket
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 import redis
 
@@ -130,12 +130,17 @@ class FlowEngineConsumer:
         self._ensure_groups(stream_keys)
 
         try:
-            results = self._redis.xreadgroup(
-                groupname=self.GROUP_NAME,
-                consumername=self.CONSUMER_NAME,
-                streams={k: ">" for k in stream_keys},
-                count=_READ_COUNT,
-                block=_BLOCK_MS,
+            # Sync redis client: xreadgroup returns a list at runtime, but
+            # redis-py types it with the async union (Awaitable | T).
+            results = cast(
+                "list[Any] | None",
+                self._redis.xreadgroup(
+                    groupname=self.GROUP_NAME,
+                    consumername=self.CONSUMER_NAME,
+                    streams={k: ">" for k in stream_keys},
+                    count=_READ_COUNT,
+                    block=_BLOCK_MS,
+                ),
             )
         except redis.RedisError:
             logger.exception("XREADGROUP error")
@@ -277,7 +282,7 @@ class FlowEngineConsumer:
         minute_bucket = math.floor(time.time() / 60)
         key = f"rate:tenant:{tenant_id}:minute:{minute_bucket}"
         try:
-            count = self._redis.incr(key)
+            count = cast(int, self._redis.incr(key))
             if count == 1:
                 self._redis.expire(key, 120)
             return count <= _RATE_LIMIT
@@ -287,7 +292,9 @@ class FlowEngineConsumer:
 
     def _reenqueue(self, stream_key: str, fields: dict[str, str]) -> None:
         try:
-            self._redis.xadd(stream_key, fields, maxlen=10_000, approximate=True)
+            # redis-py's xadd fields type is invariant and rejects dict[str, str];
+            # str keys/values are valid stream fields at runtime.
+            self._redis.xadd(stream_key, fields, maxlen=10_000, approximate=True)  # type: ignore[arg-type]
         except redis.RedisError:
             logger.exception("Failed to re-enqueue message", extra={"stream": stream_key})
 
@@ -302,7 +309,7 @@ class FlowEngineConsumer:
 
     def _discover_streams(self) -> list[str]:
         try:
-            keys = self._redis.keys(self.STREAM_PATTERN)
+            keys = cast("list[Any]", self._redis.keys(self.STREAM_PATTERN))
             return [k.decode() if isinstance(k, bytes) else k for k in keys]
         except redis.RedisError:
             logger.exception("Failed to discover streams")
@@ -322,13 +329,16 @@ class FlowEngineConsumer:
     def _xclaim_stuck_messages(self) -> None:
         for stream_key in self._discover_streams():
             try:
-                result = self._redis.xautoclaim(
-                    stream_key,
-                    self.GROUP_NAME,
-                    self.CONSUMER_NAME,
-                    _XCLAIM_IDLE_MS,
-                    start_id="0-0",
-                    count=10,
+                result = cast(
+                    "list[Any]",
+                    self._redis.xautoclaim(
+                        stream_key,
+                        self.GROUP_NAME,
+                        self.CONSUMER_NAME,
+                        _XCLAIM_IDLE_MS,
+                        start_id="0-0",
+                        count=10,
+                    ),
                 )
                 claimed = result[1] if result else []
                 for message_id, fields in claimed:

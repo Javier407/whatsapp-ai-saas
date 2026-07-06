@@ -51,7 +51,7 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             base["exc_info"] = self.formatException(record.exc_info)
         # Merge any extra keys passed via `extra={}`
-        reserved = logging.LogRecord("", 0, "", 0, "", [], None).__dict__.keys()
+        reserved = logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
         for key, value in record.__dict__.items():
             if key not in reserved and not key.startswith("_"):
                 base[key] = value

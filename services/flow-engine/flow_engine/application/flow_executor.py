@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from flow_engine.application.handoff import HANDOFF_ACK_MESSAGE, wants_human
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
@@ -286,7 +286,7 @@ class FlowExecutor:
         self,
         message: InboundMessage,
         session: Session,
-        direction: str,
+        direction: Literal["inbound", "outbound"],
         text: str,
         llm_tokens: int = 0,
     ) -> None:

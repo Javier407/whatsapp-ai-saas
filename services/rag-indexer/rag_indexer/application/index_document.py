@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import signal
+from typing import Any, cast
 
 from rag_indexer.domain.models import DocumentChunk, IndexingJob
 from rag_indexer.domain.ports import IDocumentStore, IStatusRepo, IVectorStore
@@ -266,7 +267,9 @@ class IndexDocumentUseCase:
             try:
                 signal.alarm(0)
                 if old_handler is not None:
-                    signal.signal(signal.SIGALRM, old_handler)
+                    # old_handler holds whatever signal.signal() returned — a valid
+                    # handler — but it is stored as `object`, so re-narrow for the API.
+                    signal.signal(signal.SIGALRM, cast(Any, old_handler))
             except (AttributeError, OSError):
                 pass
 
