@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import fastifySensible from '@fastify/sensible';
 import fastifyMultipart from '@fastify/multipart';
-import fp from 'fastify-plugin';
 import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
 import { getPrismaClient } from './infrastructure/prisma/PrismaClient.js';
@@ -180,8 +179,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
 
       // Health checks
-      api.get('/health', async () => ({ status: 'ok' }));
-      api.get('/healthz', async () => ({ status: 'ok' }));
+      api.get('/health', () => ({ status: 'ok' }));
+      api.get('/healthz', () => ({ status: 'ok' }));
       api.get('/readyz', async (_req, reply) => {
         try {
           await redis.ping();

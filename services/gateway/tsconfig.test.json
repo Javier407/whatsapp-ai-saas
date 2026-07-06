@@ -11,5 +11,6 @@
     // Required by ts-jest when module is NodeNext (per-file transpilation).
     "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-test"]
 }

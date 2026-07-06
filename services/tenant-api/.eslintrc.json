@@ -26,6 +26,13 @@
   },
   "overrides": [
     {
+      "files": ["src/interfaces/http/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/require-await": "off",
+        "@typescript-eslint/unbound-method": "off"
+      }
+    },
+    {
       "files": ["tests/**/*.ts"],
       "rules": {
         "@typescript-eslint/no-unsafe-assignment": "off",
@@ -35,6 +42,8 @@
         "@typescript-eslint/no-unsafe-argument": "off",
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/require-await": "off",
+        "@typescript-eslint/unbound-method": "off",
+        "@typescript-eslint/no-unnecessary-type-assertion": "off",
         "@typescript-eslint/explicit-function-return-type": "off"
       }
     }

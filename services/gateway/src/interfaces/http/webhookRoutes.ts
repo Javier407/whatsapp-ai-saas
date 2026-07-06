@@ -29,6 +29,9 @@ export interface WebhookRouteDeps {
  * - All downstream processing (tenant lookup, enqueue) runs asynchronously
  *   and errors are caught + logged without affecting the 200 response.
  */
+// Fastify plugin contract (FastifyPluginAsync): the async signature is the
+// plugin's type, even though route registration itself is synchronous.
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function webhookRoutes(
   fastify: FastifyInstance,
   deps: WebhookRouteDeps,
