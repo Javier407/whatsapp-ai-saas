@@ -1,6 +1,9 @@
 /** @type {import('jest').Config} */
 export default {
-  preset: 'ts-jest/presets/default-esm',
+  // Plain ts-jest preset + useESM in the transform (same shape as tenant-api,
+  // which runs green): the default-esm preset double-applies ESM handling here
+  // and crashes with "exports is not defined".
+  preset: 'ts-jest',
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {

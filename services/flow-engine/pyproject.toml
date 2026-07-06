@@ -10,9 +10,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn>=0.29",
-    "redis>=5.0",
+    "redis>=5.0,<6",
     "psycopg2-binary>=2.9",
-    "chromadb>=0.5",
+    "chromadb>=0.5,<0.6",
     "cryptography>=42.0",
     "sentence-transformers>=2.7",
     "langchain>=0.3,<0.4",

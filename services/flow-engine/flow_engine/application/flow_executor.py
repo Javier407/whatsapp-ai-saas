@@ -8,17 +8,26 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
+from flow_engine.application.handoff import HANDOFF_ACK_MESSAGE, wants_human
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
 from flow_engine.application.trigger_matcher import match_trigger
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
-from flow_engine.domain.models import Flow, FlowNode, InboundMessage, Session
-from flow_engine.domain.ports import IConvLogRepo, IFlowRepo, ILLMPort, IMetaSendPort, IVectorStore
+from flow_engine.domain.models import ConversationTurn, Flow, InboundMessage, Session
+from flow_engine.domain.ports import (
+    IAppointmentRepo,
+    IConvLogRepo,
+    IFlowRepo,
+    ILLMPort,
+    IMetaSendPort,
+    IVectorStore,
+)
 
 logger = logging.getLogger(__name__)
 
 _MAX_ITERATIONS = 20
+_MAX_HISTORY = 10
 
 
 class FlowExecutor:
@@ -31,21 +40,34 @@ class FlowExecutor:
         vector_store: IVectorStore,
         llm: ILLMPort,
         conv_log_repo: IConvLogRepo,
+        appointment_repo: IAppointmentRepo | None = None,
     ) -> None:
         self._flow_repo = flow_repo
         self._meta_send = meta_send
         self._vector_store = vector_store
         self._llm = llm
         self._conv_log_repo = conv_log_repo
+        self._appointment_repo = appointment_repo
 
     def execute(self, message: InboundMessage, session: Session) -> None:
         """Process one inbound message, mutating *session* in place."""
         now = _now_iso()
 
-        # Append user turn to history (cap at 10)
-        session.history.append({"role": "user", "content": message.text, "ts": now})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        # Append user turn to history (capped at _MAX_HISTORY)
+        _append_to_history(session, {"role": "user", "content": message.text, "ts": now})
+
+        # Persist the inbound turn so the dashboard can show the conversation
+        self._write_conv_log(message, session, "inbound", message.text)
+
+        # Human handoff: while a human owns the conversation the bot stays quiet
+        # (the inbound is still logged above so the agent sees the full thread).
+        if session.state == "HUMAN_HANDOFF":
+            session.last_msg_at = _now_iso()
+            return
+        if wants_human(message.text):
+            self._enter_handoff(message, session)
+            session.last_msg_at = _now_iso()
+            return
 
         deps = ExecutorDeps(
             meta_send=self._meta_send,
@@ -53,6 +75,7 @@ class FlowExecutor:
             llm=self._llm,
             phone_number_id=message.phone_number_id,
             access_token=message.access_token,
+            appointments=self._appointment_repo,
         )
 
         active_flows = self._flow_repo.get_active_flows(message.tenant_id)
@@ -175,13 +198,29 @@ class FlowExecutor:
         session.state = "LLM_FALLBACK"
         rag_context: str | None = None
         results = self._vector_store.query(message.tenant_id, message.text, top_k=5)
-        if results and results[0][1] >= 0.5:
+        # 0.35: cosine similarity from MiniLM on multi-topic chunks rarely
+        # exceeds ~0.5 even for clear hits; gate only filters true noise.
+        top_score = results[0][1] if results else 0.0
+        if results and top_score >= 0.35:
             rag_context = "\n\n".join(text for text, _ in results)
+        logger.info(
+            "RAG fallback retrieval",
+            extra={
+                "tenant_id": message.tenant_id,
+                "top_score": round(top_score, 4),
+                "context_used": rag_context is not None,
+            },
+        )
 
         try:
             reply_text, tokens = self._llm.generate(
-                system_prompt="You are a helpful WhatsApp assistant. Answer concisely.",
-                history=session.history[-10:],
+                system_prompt=(
+                    "You are this business's WhatsApp assistant. Answer concisely. "
+                    "When knowledge-base context is provided, base your answer "
+                    "strictly on it. If the context does not cover the question, "
+                    "say you don't have that information instead of guessing."
+                ),
+                history=session.history[-_MAX_HISTORY:],
                 user_message=message.text,
                 rag_context=rag_context,
                 max_tokens=500,
@@ -201,9 +240,8 @@ class FlowExecutor:
             access_token=message.access_token,
         )
 
-        session.history.append({"role": "assistant", "content": reply_text, "ts": _now_iso()})
-        if len(session.history) > 10:
-            session.history = session.history[-10:]
+        _append_to_history(session, {"role": "assistant", "content": reply_text, "ts": _now_iso()})
+        self._write_conv_log(message, session, "outbound", reply_text, tokens)
 
         session.state = "IDLE"
 
@@ -215,16 +253,71 @@ class FlowExecutor:
     ) -> None:
         """Append assistant reply to history."""
         if result.reply:
-            session.history.append(
-                {"role": "assistant", "content": result.reply, "ts": _now_iso()}
+            _append_to_history(
+                session, {"role": "assistant", "content": result.reply, "ts": _now_iso()}
             )
-            if len(session.history) > 10:
-                session.history = session.history[-10:]
+            self._write_conv_log(message, session, "outbound", result.reply, result.llm_tokens)
+
+    def _enter_handoff(self, message: InboundMessage, session: Session) -> None:
+        """Move the conversation to HUMAN_HANDOFF and acknowledge once.
+
+        A send failure must not prevent the handoff state from persisting, so
+        the Meta send is best-effort here.
+        """
+        session.state = "HUMAN_HANDOFF"
+        try:
+            self._meta_send.send_text(
+                phone_number_id=message.phone_number_id,
+                to=message.wa_id,
+                text=HANDOFF_ACK_MESSAGE,
+                access_token=message.access_token,
+            )
+        except Exception:
+            logger.warning(
+                "Handoff ack send failed",
+                extra={"tenant_id": message.tenant_id, "wa_id": message.wa_id},
+            )
+        _append_to_history(
+            session, {"role": "assistant", "content": HANDOFF_ACK_MESSAGE, "ts": _now_iso()}
+        )
+        self._write_conv_log(message, session, "outbound", HANDOFF_ACK_MESSAGE)
+
+    def _write_conv_log(
+        self,
+        message: InboundMessage,
+        session: Session,
+        direction: Literal["inbound", "outbound"],
+        text: str,
+        llm_tokens: int = 0,
+    ) -> None:
+        """Persist one conversation turn so the dashboard can display it.
+
+        The repo swallows DB errors, so logging never breaks message processing.
+        """
+        self._conv_log_repo.write(
+            ConversationTurn(
+                tenant_id=message.tenant_id,
+                wa_id=message.wa_id,
+                flow_id=session.flow_id,
+                direction=direction,
+                message_text=text,
+                node_id=session.current_node,
+                llm_tokens=llm_tokens,
+                created_at=_now_iso(),
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _append_to_history(session: Session, turn: dict[str, Any]) -> None:
+    """Append a turn and keep only the last _MAX_HISTORY entries."""
+    session.history.append(turn)
+    if len(session.history) > _MAX_HISTORY:
+        session.history = session.history[-_MAX_HISTORY:]
 
 
 def _find_flow(flows: list[Flow], flow_id: str | None) -> Flow | None:

@@ -42,3 +42,28 @@ def test_parse_message_legacy_flat_fields() -> None:
     assert msg.message_id == "m-1"
     assert msg.phone_number_id == "p-1"
     assert msg.text == "hello"
+
+
+class TestStalenessGuard:
+    def test_fresh_unix_timestamp_is_not_stale(self) -> None:
+        import time
+        from flow_engine.interfaces.consumer import _is_stale
+
+        assert _is_stale(str(int(time.time() - 60))) is False
+
+    def test_old_unix_timestamp_is_stale(self) -> None:
+        import time
+        from flow_engine.interfaces.consumer import _is_stale
+
+        assert _is_stale(str(int(time.time() - 7200))) is True  # 2h old
+
+    def test_old_iso_timestamp_is_stale(self) -> None:
+        from flow_engine.interfaces.consumer import _is_stale
+
+        assert _is_stale("2026-01-01T00:00:00+00:00") is True
+
+    def test_unparseable_timestamp_is_treated_as_fresh(self) -> None:
+        from flow_engine.interfaces.consumer import _is_stale
+
+        assert _is_stale("not-a-date") is False
+        assert _is_stale("") is False

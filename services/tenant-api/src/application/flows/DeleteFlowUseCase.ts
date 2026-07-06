@@ -9,12 +9,10 @@ export class DeleteFlowUseCase {
   ) {}
 
   async execute(tenantId: string, flowId: string): Promise<void> {
-    const existing = await this.flowRepo.findById(flowId);
-    if (!existing || existing.tenantId !== tenantId) {
-      throw new NotFoundError('Flow', flowId);
-    }
+    const existing = await this.flowRepo.findByIdForTenant(tenantId, flowId);
+    if (!existing) throw new NotFoundError('Flow', flowId);
 
-    await this.flowRepo.delete(flowId);
+    await this.flowRepo.delete(tenantId, flowId);
     this.flowEngineClient.reloadTenantFlows(tenantId).catch(() => undefined);
   }
 }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import chromadb
 
@@ -40,7 +41,9 @@ class ChromaVectorStore(IVectorStore):
 
         collection.upsert(
             ids=[c.id for c in chunks],
-            embeddings=[c.embedding for c in chunks],
+            # chromadb's stubs demand ndarray types; a list of float lists is
+            # accepted at runtime.
+            embeddings=cast(Any, [c.embedding for c in chunks]),
             documents=[c.text for c in chunks],
             metadatas=[
                 {

@@ -1,3 +1,5 @@
+// Native ESM jest does not inject the `jest` global; it must be imported.
+import { jest } from '@jest/globals';
 import argon2 from 'argon2';
 import { LoginUseCase } from '../../src/application/auth/LoginUseCase.js';
 import { UnauthorizedError } from '../../src/domain/errors.js';

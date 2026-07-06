@@ -1,148 +1,281 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { conversations, type ConversationLog } from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 function messageText(log: ConversationLog): string {
   const c = log.content as { text?: string; body?: string };
   return c?.text ?? c?.body ?? JSON.stringify(log.content).slice(0, 80);
 }
 
-function directionLabel(direction: string) {
-  return direction === "inbound" ? "Entrante" : "Saliente";
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDay(iso: string) {
+  return new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
+type Contact = { waId: string; lastMessage: ConversationLog };
+
+function deriveContacts(logs: ConversationLog[] | undefined): Contact[] {
+  if (!logs) return [];
+  const latestByWaId = new Map<string, ConversationLog>();
+  for (const log of logs) {
+    const existing = latestByWaId.get(log.wa_id);
+    if (!existing || new Date(log.created_at) > new Date(existing.created_at)) {
+      latestByWaId.set(log.wa_id, log);
+    }
+  }
+  return [...latestByWaId.entries()]
+    .map(([waId, lastMessage]) => ({ waId, lastMessage }))
+    .sort(
+      (a, b) =>
+        new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime(),
+    );
 }
 
 export function ConversationsPage() {
-  const [waId, setWaId] = useState("");
-  const [selected, setSelected] = useState<ConversationLog | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedWaId, setSelectedWaId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["conversations", waId],
-    queryFn: () => conversations.list({ wa_id: waId || undefined, limit: 100 }),
+  const { data: contactsData, isLoading: contactsLoading } = useQuery({
+    queryKey: ["conversations", "contacts", search],
+    queryFn: () => conversations.list({ wa_id: search || undefined, limit: 200 }),
   });
 
+  const {
+    data: threadData,
+    isLoading: threadLoading,
+    refetch: refetchThread,
+  } = useQuery({
+    queryKey: ["conversations", "thread", selectedWaId],
+    queryFn: () => conversations.list({ wa_id: selectedWaId!, limit: 200 }),
+    enabled: !!selectedWaId,
+  });
+
+  const stateQuery = useQuery({
+    queryKey: ["conv-state", selectedWaId],
+    queryFn: () => conversations.getState(selectedWaId!),
+    enabled: !!selectedWaId,
+  });
+
+  const contacts = useMemo(() => deriveContacts(contactsData), [contactsData]);
+
+  const thread = useMemo(
+    () =>
+      [...(threadData ?? [])].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+    [threadData],
+  );
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [thread]);
+
+  const handoff = stateQuery.data?.handoff ?? false;
+
+  async function runAction(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await fn();
+      await refetchThread();
+      await stateQuery.refetch();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Input
-            placeholder="Buscar por número de WhatsApp…"
-            className="flex-1 sm:w-64"
-            value={waId}
-            onChange={(e) => setWaId(e.target.value)}
-          />
-          <Button variant="outline" size="icon" onClick={() => refetch()} aria-label="Buscar">
-            <Search className="h-4 w-4" />
-          </Button>
+    <div className="flex h-full gap-4">
+      {/* Contacts pane */}
+      <div
+        className={cn(
+          "flex flex-col rounded-md border overflow-hidden",
+          selectedWaId ? "hidden md:flex md:w-80 shrink-0" : "flex w-full md:w-80 md:shrink-0",
+        )}
+      >
+        <div className="p-3 border-b shrink-0">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por número…"
+              className="pl-8"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {contactsLoading && <p className="p-4 text-sm text-muted-foreground">Cargando…</p>}
+          {!contactsLoading && contacts.length === 0 && (
+            <p className="p-4 text-sm text-muted-foreground">No se encontraron conversaciones.</p>
+          )}
+          {contacts.map((contact) => (
+            <button
+              key={contact.waId}
+              type="button"
+              onClick={() => {
+                setSelectedWaId(contact.waId);
+                setReplyText("");
+                setActionError(null);
+              }}
+              className={cn(
+                "w-full text-left px-3 py-3 border-b transition-colors hover:bg-muted/50",
+                selectedWaId === contact.waId && "bg-primary/10",
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-mono text-sm font-medium truncate">{contact.waId}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">
+                  {formatDay(contact.lastMessage.created_at)}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {messageText(contact.lastMessage)}
+              </p>
+            </button>
+          ))}
         </div>
       </div>
 
-      {isLoading && <p className="text-muted-foreground">Cargando conversaciones…</p>}
+      {/* Thread pane */}
+      <div
+        className={cn(
+          "flex-1 flex flex-col rounded-md border overflow-hidden min-w-0",
+          selectedWaId ? "flex" : "hidden md:flex",
+        )}
+      >
+        {!selectedWaId && (
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+            Seleccioná una conversación para ver el historial.
+          </div>
+        )}
 
-      {!isLoading && data?.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No se encontraron conversaciones.
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="md:hidden space-y-2">
-        {data?.map((log) => (
-          <Card
-            key={log.id}
-            className="cursor-pointer hover:bg-muted/30 transition-colors"
-            onClick={() => setSelected(log)}
-          >
-            <CardContent className="p-4 space-y-2">
-              <div className="flex justify-between items-start gap-2">
-                <span className="font-mono text-xs truncate">{log.wa_id}</span>
-                <Badge variant={log.direction === "inbound" ? "secondary" : "default"}>
-                  {directionLabel(log.direction)}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">{messageText(log)}</p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(log.created_at).toLocaleString("es")}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="hidden md:block rounded-md border overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left font-medium">Número</th>
-              <th className="px-4 py-3 text-left font-medium">Dirección</th>
-              <th className="px-4 py-3 text-left font-medium">Mensaje</th>
-              <th className="px-4 py-3 text-left font-medium">Tokens</th>
-              <th className="px-4 py-3 text-left font-medium">Fecha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data?.map((log) => (
-              <tr
-                key={log.id}
-                className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
-                onClick={() => setSelected(log)}
+        {selectedWaId && (
+          <>
+            <div className="h-14 flex items-center gap-2 border-b px-3 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setSelectedWaId(null)}
+                aria-label="Volver"
               >
-                <td className="px-4 py-3 font-mono text-xs">{log.wa_id}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={log.direction === "inbound" ? "secondary" : "default"}>
-                    {directionLabel(log.direction)}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 max-w-xs truncate text-muted-foreground">
-                  {messageText(log)}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{log.llm_tokens ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {new Date(log.created_at).toLocaleString("es")}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle del mensaje</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-3 text-sm">
-              <p>
-                <span className="text-muted-foreground">Número: </span>
-                <span className="font-mono">{selected.wa_id}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Dirección: </span>
-                {directionLabel(selected.direction)}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Mensaje: </span>
-                {messageText(selected)}
-              </p>
-              <pre className="text-xs bg-muted rounded p-4 overflow-auto max-h-48">
-                {JSON.stringify(selected.content, null, 2)}
-              </pre>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <span className="font-mono text-sm font-medium">{selectedWaId}</span>
+              <span className="ml-auto">
+                {stateQuery.isLoading ? (
+                  <span className="text-xs text-muted-foreground">…</span>
+                ) : handoff ? (
+                  <Badge variant="destructive">En atención humana</Badge>
+                ) : (
+                  <Badge variant="secondary">Bot activo</Badge>
+                )}
+              </span>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
+              {threadLoading && <p className="text-sm text-muted-foreground">Cargando historial…</p>}
+              {!threadLoading &&
+                thread.map((log) => {
+                  const isOutbound = log.direction === "outbound";
+                  const isAgent = log.node_key === "human_agent";
+                  return (
+                    <div key={log.id} className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cn(
+                          "max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+                          isOutbound
+                            ? "bg-primary text-primary-foreground rounded-br-sm"
+                            : "bg-card border rounded-bl-sm",
+                        )}
+                      >
+                        {isAgent && (
+                          <p className="text-[10px] font-medium opacity-80 mb-0.5">Agente</p>
+                        )}
+                        <p className="whitespace-pre-wrap break-words">{messageText(log)}</p>
+                        <p
+                          className={cn(
+                            "mt-1 text-[10px] opacity-70",
+                            isOutbound ? "text-right" : "text-left",
+                          )}
+                        >
+                          {formatTime(log.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Agent controls — a person can reply in any chat, any time */}
+            <div className="border-t p-3 shrink-0 space-y-2">
+              {actionError && <p className="text-xs text-destructive">{actionError}</p>}
+              <Textarea
+                placeholder="Escribí una respuesta manual para el cliente…"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                rows={2}
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={busy || !replyText.trim()}
+                  onClick={() =>
+                    runAction(async () => {
+                      await conversations.reply(selectedWaId, replyText.trim());
+                      setReplyText("");
+                    })
+                  }
+                >
+                  Enviar respuesta
+                </Button>
+                {handoff ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => runAction(() => conversations.resume(selectedWaId))}
+                  >
+                    Reanudar bot
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => runAction(() => conversations.takeover(selectedWaId))}
+                  >
+                    Tomar control
+                  </Button>
+                )}
+                <p className="text-[11px] text-muted-foreground ml-auto">
+                  {handoff
+                    ? "El bot está en pausa: solo responde el equipo."
+                    : "El bot sigue activo; tu mensaje se suma a la conversación."}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

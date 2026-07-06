@@ -21,7 +21,7 @@ import jmespath
 
 from flow_engine.domain.errors import NodeExecutionError
 from flow_engine.domain.models import FlowNode, Session
-from flow_engine.domain.ports import ILLMPort, IMetaSendPort, IVectorStore
+from flow_engine.domain.ports import IAppointmentRepo, ILLMPort, IMetaSendPort, IVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ class ExecutorDeps:
     llm: ILLMPort
     phone_number_id: str
     access_token: str
+    appointments: IAppointmentRepo | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -218,9 +219,17 @@ def execute_condition(
     """Evaluate JMESPath expression; branch accordingly. No message sent."""
     context = {"slots": session.slots}
     for transition in node.transitions:
-        condition: str | None = transition.get("condition")
-        if condition is None or condition == "default":
-            return NodeResult(next_node=transition.get("next_node"))
+        condition = transition.get("condition")
+        if _is_always(condition):
+            return NodeResult(next_node=transition.get("next"))
+        if not isinstance(condition, str):
+            # Object conditions beyond {type: always} are not evaluated yet —
+            # pending condition-engine unification with the stored contract.
+            logger.warning(
+                "Unsupported condition object — skipping transition",
+                extra={"node_id": node.id, "condition": condition},
+            )
+            continue
         try:
             result = jmespath.search(condition, context)
         except jmespath.exceptions.JMESPathError:
@@ -230,7 +239,7 @@ def execute_condition(
             )
             result = None
         if result:
-            return NodeResult(next_node=transition.get("next_node"))
+            return NodeResult(next_node=transition.get("next"))
 
     return NodeResult(next_node=None)
 
@@ -359,6 +368,56 @@ def execute_api_call(
     )
 
 
+def execute_book_appointment(
+    node: FlowNode,
+    session: Session,
+    message_text: str,
+    deps: ExecutorDeps,
+) -> NodeResult:
+    """Persist an appointment from session slots, then optionally confirm.
+
+    Config:
+      customer_name_slot: slot holding the customer's name  (default "customer_name")
+      service_slot:       slot holding the requested service (default "service")
+      date_slot:          slot holding the requested date    (default "appointment_date")
+      confirmation:       optional message sent after booking; slots interpolate
+    """
+    if deps.appointments is None:
+        raise NodeExecutionError(node.id, "Appointment repository not configured")
+
+    config = node.config
+    customer_name = session.slots.get(config.get("customer_name_slot", "customer_name"))
+    service = session.slots.get(config.get("service_slot", "service"))
+    appointment_date = session.slots.get(config.get("date_slot", "appointment_date"))
+
+    try:
+        deps.appointments.create(
+            tenant_id=session.tenant_id,
+            wa_id=session.wa_id,
+            customer_name=str(customer_name) if customer_name is not None else None,
+            service=str(service) if service is not None else None,
+            appointment_date=str(appointment_date) if appointment_date is not None else None,
+        )
+    except Exception as exc:
+        raise NodeExecutionError(node.id, f"Failed to book appointment: {exc}")
+
+    confirmation: str | None = config.get("confirmation")
+    if confirmation:
+        try:
+            confirmation = confirmation.format_map(session.slots)
+        except (KeyError, ValueError):
+            pass
+        deps.meta_send.send_text(
+            phone_number_id=deps.phone_number_id,
+            to=session.wa_id,
+            text=confirmation,
+            access_token=deps.access_token,
+        )
+
+    next_node = _first_transition(node, session)
+    return NodeResult(reply=confirmation, next_node=next_node)
+
+
 def execute_end(
     node: FlowNode,
     session: Session,
@@ -395,6 +454,7 @@ _EXECUTORS = {
     "rag_lookup": execute_rag_lookup,
     "llm_generate": execute_llm_generate,
     "api_call": execute_api_call,
+    "book_appointment": execute_book_appointment,
     "end": execute_end,
 }
 
@@ -416,19 +476,30 @@ def execute_node(
 # ---------------------------------------------------------------------------
 
 
+def _is_always(cond: Any) -> bool:
+    """Unconditional transition in any of the contract's shapes.
+
+    Stored flows use condition objects ({"type": "always"}); legacy string
+    conditions (None / "default") are kept for backward compatibility.
+    """
+    if cond is None or cond == "default":
+        return True
+    return isinstance(cond, dict) and cond.get("type") in ("always", "default")
+
+
 def _first_transition(node: FlowNode, session: Session) -> str | None:
     """Return the first unconditional (or only) transition target."""
     for t in node.transitions:
-        cond = t.get("condition")
-        if cond is None or cond == "default":
-            return t.get("next_node")
+        if _is_always(t.get("condition")):
+            return t.get("next")
     return None
 
 
 def _transition_for_condition(node: FlowNode, label: str) -> str | None:
     for t in node.transitions:
-        if t.get("condition") == label:
-            return t.get("next_node")
+        cond = t.get("condition")
+        if cond == label or (isinstance(cond, dict) and cond.get("type") == label):
+            return t.get("next")
     return None
 
 

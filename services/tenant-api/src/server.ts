@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import fastifySensible from '@fastify/sensible';
 import fastifyMultipart from '@fastify/multipart';
-import fp from 'fastify-plugin';
 import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
 import { getPrismaClient } from './infrastructure/prisma/PrismaClient.js';
@@ -10,6 +9,10 @@ import { PrismaUserRepo } from './infrastructure/prisma/PrismaUserRepo.js';
 import { PrismaFlowRepo } from './infrastructure/prisma/PrismaFlowRepo.js';
 import { PrismaKbDocumentRepo } from './infrastructure/prisma/PrismaKbDocumentRepo.js';
 import { PrismaConvLogRepo } from './infrastructure/prisma/PrismaConvLogRepo.js';
+import { PrismaAppointmentRepo } from './infrastructure/prisma/PrismaAppointmentRepo.js';
+import { ListAppointmentsUseCase } from './application/appointments/ListAppointmentsUseCase.js';
+import { UpdateAppointmentStatusUseCase } from './application/appointments/UpdateAppointmentStatusUseCase.js';
+import { appointmentsRoutes } from './interfaces/http/routes/appointments.routes.js';
 import { MinioStorageAdapter } from './infrastructure/storage/MinioStorageAdapter.js';
 import { RedisIndexingQueue } from './infrastructure/redis/RedisIndexingQueue.js';
 import { FlowEngineHttpClient } from './infrastructure/flowengine/FlowEngineHttpClient.js';
@@ -73,10 +76,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   const kbRepo = new PrismaKbDocumentRepo(prisma);
   const convLogRepo = new PrismaConvLogRepo(prisma);
 
+  // S3_ENDPOINT arrives as a full URL (http://minio:9000) but the minio
+  // client wants hostname, port, and SSL flag as separate fields
+  const s3Url = new URL(config.S3_ENDPOINT);
   const storage = new MinioStorageAdapter({
-    endPoint: config.S3_ENDPOINT,
-    port: config.S3_PORT,
-    useSSL: config.S3_USE_SSL,
+    endPoint: s3Url.hostname,
+    port: s3Url.port ? Number(s3Url.port) : config.S3_PORT,
+    useSSL: s3Url.protocol === 'https:',
     accessKey: config.S3_ACCESS_KEY,
     secretKey: config.S3_SECRET_KEY,
     bucket: config.S3_BUCKET_KB,
@@ -115,6 +121,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   const deleteDocumentUseCase = new DeleteDocumentUseCase(kbRepo, storage, queue);
   const listConversationsUseCase = new ListConversationsUseCase(convLogRepo);
   const dryRunUseCase = new DryRunUseCase(flowEngineClient);
+  const appointmentRepo = new PrismaAppointmentRepo(prisma);
+  const listAppointmentsUseCase = new ListAppointmentsUseCase(appointmentRepo);
+  const updateAppointmentStatusUseCase = new UpdateAppointmentStatusUseCase(appointmentRepo);
 
   // ---------------------------------------------------------------------------
   // Routes
@@ -149,11 +158,13 @@ export async function buildApp(): Promise<FastifyInstance> {
         uploadDocumentUseCase,
         listDocumentsUseCase,
         deleteDocumentUseCase,
+        maxFileSizeBytes: config.KB_MAX_FILE_SIZE_MB * 1024 * 1024,
       });
 
       await api.register(conversationsRoutes, {
         prefix: '/conversations',
         listConversationsUseCase,
+        flowEngineClient,
       });
 
       await api.register(dryrunRoutes, {
@@ -161,9 +172,15 @@ export async function buildApp(): Promise<FastifyInstance> {
         dryRunUseCase,
       });
 
+      await api.register(appointmentsRoutes, {
+        prefix: '/appointments',
+        listAppointmentsUseCase,
+        updateAppointmentStatusUseCase,
+      });
+
       // Health checks
-      api.get('/health', async () => ({ status: 'ok' }));
-      api.get('/healthz', async () => ({ status: 'ok' }));
+      api.get('/health', () => ({ status: 'ok' }));
+      api.get('/healthz', () => ({ status: 'ok' }));
       api.get('/readyz', async (_req, reply) => {
         try {
           await redis.ping();

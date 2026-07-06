@@ -130,7 +130,7 @@ class TestMessageNode:
         node = _make_node(
             node_type="message",
             config={"content": "Hello"},
-            transitions=[{"condition": "default", "next_node": "n2"}],
+            transitions=[{"condition": {"type": "always"}, "next": "n2"}],
         )
         result = execute_message(node, _make_session(), "", _make_deps())
         assert result.next_node == "n2"
@@ -158,7 +158,7 @@ class TestCollectInputNode:
         node = _make_node(
             node_type="collect_input",
             config={"slot": "phone"},
-            transitions=[{"condition": "default", "next_node": "next"}],
+            transitions=[{"condition": {"type": "always"}, "next": "next"}],
         )
         result = execute_collect_input(node, _make_session(), "5512345678", _make_deps())
         assert result.slot_updates == {"phone": "5512345678"}
@@ -168,7 +168,7 @@ class TestCollectInputNode:
         node = _make_node(
             node_type="collect_input",
             config={"slot": "phone", "validation": r"\d{10}"},
-            transitions=[{"condition": "default", "next_node": "next"}],
+            transitions=[{"condition": {"type": "always"}, "next": "next"}],
         )
         result = execute_collect_input(node, _make_session(), "5512345678", _make_deps())
         assert result.slot_updates == {"phone": "5512345678"}
@@ -195,8 +195,8 @@ class TestConditionNode:
             node_type="condition",
             config={},
             transitions=[
-                {"condition": "slots.age > `18`", "next_node": "adult"},
-                {"condition": "default", "next_node": "minor"},
+                {"condition": "slots.age > `18`", "next": "adult"},
+                {"condition": {"type": "always"}, "next": "minor"},
             ],
         )
         session = _make_session(slots={"age": 25})
@@ -208,8 +208,8 @@ class TestConditionNode:
             node_type="condition",
             config={},
             transitions=[
-                {"condition": "slots.age > `100`", "next_node": "centenarian"},
-                {"condition": "default", "next_node": "normal"},
+                {"condition": "slots.age > `100`", "next": "centenarian"},
+                {"condition": {"type": "always"}, "next": "normal"},
             ],
         )
         session = _make_session(slots={"age": 25})
@@ -303,3 +303,85 @@ def test_unknown_node_type_raises() -> None:
     node = _make_node(node_type="nonexistent")
     with pytest.raises(NodeExecutionError):
         execute_node(node, _make_session(), "", _make_deps())
+
+
+# ---------------------------------------------------------------------------
+# book_appointment node
+# ---------------------------------------------------------------------------
+
+
+class FakeAppointmentRepo:
+    def __init__(self) -> None:
+        self.created: list[dict] = []
+
+    def create(self, tenant_id, wa_id, customer_name, service, appointment_date) -> None:
+        self.created.append(
+            {
+                "tenant_id": tenant_id,
+                "wa_id": wa_id,
+                "customer_name": customer_name,
+                "service": service,
+                "appointment_date": appointment_date,
+            }
+        )
+
+
+class TestBookAppointmentNode:
+    def test_books_from_slots_and_confirms(self) -> None:
+        from flow_engine.application.node_executors import execute_book_appointment
+
+        repo = FakeAppointmentRepo()
+        recording = RecordingMetaSendClient()
+        deps = _make_deps(recording)
+        deps.appointments = repo
+        node = _make_node(
+            node_type="book_appointment",
+            config={"confirmation": "Cita agendada para {appointment_date}, {customer_name}."},
+            transitions=[{"condition": "default", "next_node": "end"}],
+        )
+        session = _make_session(
+            slots={
+                "customer_name": "Javier",
+                "service": "Forrado completo",
+                "appointment_date": "Viernes 8 am",
+            }
+        )
+
+        result = execute_book_appointment(node, session, "", deps)
+
+        assert repo.created == [
+            {
+                "tenant_id": "tenant-abc",
+                "wa_id": "521234567890",
+                "customer_name": "Javier",
+                "service": "Forrado completo",
+                "appointment_date": "Viernes 8 am",
+            }
+        ]
+        assert recording.sent[0]["text"] == "Cita agendada para Viernes 8 am, Javier."
+        assert result.reply is not None
+
+    def test_custom_slot_names(self) -> None:
+        from flow_engine.application.node_executors import execute_book_appointment
+
+        repo = FakeAppointmentRepo()
+        deps = _make_deps()
+        deps.appointments = repo
+        node = _make_node(
+            node_type="book_appointment",
+            config={"customer_name_slot": "nombre", "service_slot": "servicio", "date_slot": "fecha"},
+        )
+        session = _make_session(slots={"nombre": "Ana", "servicio": "PPF", "fecha": "Lunes"})
+
+        execute_book_appointment(node, session, "", deps)
+
+        assert repo.created[0]["customer_name"] == "Ana"
+        assert repo.created[0]["service"] == "PPF"
+        assert repo.created[0]["appointment_date"] == "Lunes"
+
+    def test_missing_repo_raises(self) -> None:
+        from flow_engine.application.node_executors import execute_book_appointment
+
+        node = _make_node(node_type="book_appointment")
+        with pytest.raises(NodeExecutionError):
+            execute_book_appointment(node, _make_session(), "", _make_deps())

@@ -7,6 +7,7 @@ TTL: 86400 seconds (24h), refreshed on every write.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import redis
 
@@ -28,7 +29,11 @@ class RedisSessionRepo(ISessionRepo):
     def load(self, tenant_id: str, wa_id: str) -> Session | None:
         key = self._key(tenant_id, wa_id)
         try:
-            data: dict[bytes, bytes] = self._redis.hgetall(key)
+            # redis-py types sync methods with the async union (Awaitable | T);
+            # this is the sync client, so the result is a plain dict at runtime.
+            data: dict[bytes, bytes] = cast(
+                "dict[bytes, bytes]", self._redis.hgetall(key)
+            )
         except redis.RedisError:
             logger.exception("Redis HGETALL failed", extra={"key": key})
             return None
