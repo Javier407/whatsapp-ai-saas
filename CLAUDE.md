@@ -107,7 +107,7 @@ Two Redis Streams carry all async work:
 - `flow-engine:{tenant_id}` â€” gateway â†’ flow-engine. Schema: `infra/contracts/flow-engine-message.schema.json`
 - `indexing:{tenant_id}` â€” tenant-api â†’ rag-indexer. Schema: `infra/contracts/indexing-job.schema.json`
 
-The gateway **never** calls flow-engine HTTP; all coupling is through Redis. The tenant-api calls flow-engine admin API (`FLOW_ENGINE_ADMIN_URL`) only for dry-run proxy requests.
+The gateway **never** calls flow-engine HTTP; all coupling is through Redis. The tenant-api calls the flow-engine admin API (`FLOW_ENGINE_ADMIN_URL`) only for synchronous control operations: dry-run proxying and human-handoff (agent reply / resume). Inbound message processing stays Redis-only.
 
 `flow-engine` is deployed with 2 replicas. The `MODE` env var controls what each replica runs:
 - `both` (default): stream consumer + admin HTTP server
@@ -126,7 +126,9 @@ Migrations live in `infra/migrations/` as plain SQL files â€” **not** Prism
 
 ### Session state
 
-Conversation sessions are stored as Redis Hashes keyed `session:{tenant_id}:{wa_id}`. The `Session` dataclass in `services/flow-engine/flow_engine/domain/models.py` owns serialization to/from hash fields. Sessions have a TTL and track: `state` (IDLE / IN_FLOW / LLM_FALLBACK / ERROR), current node, slots (typed variables collected during flow), and last 10 turns of history.
+Conversation sessions are stored as Redis Hashes keyed `session:{tenant_id}:{wa_id}`. The `Session` dataclass in `services/flow-engine/flow_engine/domain/models.py` owns serialization to/from hash fields. Sessions have a TTL and track: `state` (IDLE / IN_FLOW / LLM_FALLBACK / ERROR / HUMAN_HANDOFF), current node, slots (typed variables collected during flow), and last 10 turns of history.
+
+When a user explicitly asks for a person (keyword detection in `flow_engine/application/handoff.py`), the session moves to `HUMAN_HANDOFF`: the bot stops auto-replying (inbound is still logged) and a human agent takes over from the dashboard. Agent replies and resume go through the flow-engine admin endpoints `POST /admin/handoff/{tenant_id}/{wa_id}/send` and `/resume` (proxied by tenant-api), so WhatsApp token decryption stays inside flow-engine.
 
 ### Flow graph
 

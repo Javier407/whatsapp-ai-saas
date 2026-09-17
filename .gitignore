@@ -21,6 +21,9 @@ build/
 .env
 # .env.example IS committed — do not add it here
 
+# Rendered Redis ACL — envsubst output with expanded passwords (commit only the .tpl)
+infra/redis/users.acl
+
 # Build output
 dist/
 build/

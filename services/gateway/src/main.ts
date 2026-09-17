@@ -14,6 +14,8 @@ async function start(): Promise<void> {
 }
 
 start().catch((err: unknown) => {
+  // Bootstrap failed before the Fastify logger exists — stderr is the only sink.
+  // eslint-disable-next-line no-console
   console.error('Unhandled startup error:', err);
   process.exit(1);
 });

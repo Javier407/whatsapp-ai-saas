@@ -11,11 +11,10 @@ All endpoints require X-Internal-Token header (shared secret).
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 import redis as redis_module
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -73,6 +72,27 @@ def reset_session(tenant_id: str, wa_id: str) -> dict[str, str]:
 
 
 @app.get(
+    "/admin/sessions/{tenant_id}/{wa_id}/state",
+    dependencies=[Depends(_require_internal_token)],
+)
+def session_state(tenant_id: str, wa_id: str) -> dict[str, Any]:
+    """Return the conversation's current session state (for the agent inbox).
+
+    ``state`` is None when no session exists (e.g. a fresh contact).
+    """
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+    session = session_repo.load(tenant_id, wa_id)
+    return {
+        "tenant_id": tenant_id,
+        "wa_id": wa_id,
+        "state": session.state if session else None,
+        "handoff": bool(session and session.state == "HUMAN_HANDOFF"),
+    }
+
+
+@app.get(
     "/admin/health",
     dependencies=[Depends(_require_internal_token)],
 )
@@ -117,6 +137,30 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
     dry_executor = copy.copy(executor)
     dry_executor._meta_send = recording_client
 
+    # Dry runs must never persist real appointments — record them instead.
+    class _RecordingAppointmentRepo:
+        def __init__(self) -> None:
+            self.created: list[dict[str, Any]] = []
+
+        def create(self, tenant_id, wa_id, customer_name, service, appointment_date) -> None:
+            self.created.append(
+                {
+                    "customer_name": customer_name,
+                    "service": service,
+                    "appointment_date": appointment_date,
+                }
+            )
+
+    recording_appointments = _RecordingAppointmentRepo()
+    dry_executor._appointment_repo = recording_appointments
+
+    # Dry runs must not pollute the real conversation history either.
+    class _NoopConvLog:
+        def write(self, turn: Any) -> None:
+            pass
+
+    dry_executor._conv_log_repo = _NoopConvLog()
+
     now = datetime.now(timezone.utc).isoformat()
     session = session_repo.load(body.tenant_id, body.simulated_wa_id)
     if session is None:
@@ -139,7 +183,118 @@ def dry_run(body: DryRunRequest) -> dict[str, Any]:
         "current_node": session.current_node,
         "slots": session.slots,
         "sent": recording_client.sent,
+        "appointments": recording_appointments.created,
     }
+
+
+class HandoffSendRequest(BaseModel):
+    message: str
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/send",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_send(tenant_id: str, wa_id: str, body: HandoffSendRequest) -> dict[str, str]:
+    """Send an agent's reply to the customer as the business (during handoff)."""
+    from datetime import datetime, timezone
+
+    from flow_engine.domain.models import ConversationTurn
+
+    creds_repo = _state.get("tenant_credentials_repo")
+    meta_send = _state.get("meta_send")
+    conv_log_repo = _state.get("conv_log_repo")
+    if creds_repo is None or meta_send is None or conv_log_repo is None:
+        raise HTTPException(status_code=503, detail="Handoff dependencies not initialized")
+
+    text = body.message.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="message must not be empty")
+
+    creds = creds_repo.get_credentials(tenant_id)
+    if creds is None:
+        raise HTTPException(status_code=404, detail="Tenant has no WhatsApp credentials")
+    phone_number_id, access_token = creds
+
+    try:
+        meta_send.send_text(
+            phone_number_id=phone_number_id,
+            to=wa_id,
+            text=text,
+            access_token=access_token,
+        )
+    except Exception as exc:
+        logger.exception("Agent reply send failed", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+        raise HTTPException(status_code=502, detail="Failed to deliver message") from exc
+
+    # Log the agent's reply so it appears in the conversation thread.
+    # node_key='human_agent' marks it as a human (not bot) message.
+    conv_log_repo.write(
+        ConversationTurn(
+            tenant_id=tenant_id,
+            wa_id=wa_id,
+            flow_id=None,
+            direction="outbound",
+            message_text=text,
+            node_id="human_agent",
+            llm_tokens=0,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+    )
+    logger.info("Agent reply sent", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "sent"}
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/takeover",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_takeover(tenant_id: str, wa_id: str) -> dict[str, str]:
+    """Pause the bot so a human agent owns the conversation from now on."""
+    from datetime import datetime, timezone
+
+    from flow_engine.domain.models import Session
+
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+
+    session = session_repo.load(tenant_id, wa_id)
+    if session is None:
+        session = Session.new(tenant_id, wa_id, datetime.now(timezone.utc).isoformat())
+
+    session.state = "HUMAN_HANDOFF"
+    session.flow_id = None
+    session.current_node = None
+    session.slots = {}
+    session.retry_count = 0
+    session_repo.save(session)
+    logger.info("Conversation taken over via admin", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "taken_over"}
+
+
+@app.post(
+    "/admin/handoff/{tenant_id}/{wa_id}/resume",
+    dependencies=[Depends(_require_internal_token)],
+)
+def handoff_resume(tenant_id: str, wa_id: str) -> dict[str, str]:
+    """Hand the conversation back to the bot (clear HUMAN_HANDOFF)."""
+    session_repo = _state.get("session_repo")
+    if session_repo is None:
+        raise HTTPException(status_code=503, detail="Session repo not initialized")
+
+    session = session_repo.load(tenant_id, wa_id)
+    if session is None:
+        return {"status": "no_session", "tenant_id": tenant_id, "wa_id": wa_id}
+
+    session.state = "IDLE"
+    session.flow_id = None
+    session.current_node = None
+    session.slots = {}
+    session.retry_count = 0
+    session_repo.save(session)
+    logger.info("Handoff resumed via admin", extra={"tenant_id": tenant_id, "wa_id": wa_id})
+    return {"status": "resumed"}
 
 
 # ---------------------------------------------------------------------------

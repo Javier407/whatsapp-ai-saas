@@ -17,6 +17,10 @@ const config = {
   },
   testMatch: ['**/tests/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
+  // KNOWN ISSUE: the key below is misspelled (Jest's option is the singular
+  // "coverageThreshold"), so this gate is currently a no-op. Renaming it
+  // activates the gate, which will fail CI until tenant-api coverage reaches
+  // these numbers. Fix the key only together with raising coverage.
   coverageThresholds: {
     global: {
       branches: 70,

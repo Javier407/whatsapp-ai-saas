@@ -1,0 +1,58 @@
+[
+  {
+    "question": "¿Qué es y a qué se dedica el negocio?",
+    "answer": "Somos un taller de detailing y protección para motos. Hacemos lavado premium, pulido, tratamientos cerámicos e instalación de PPF (film de protección de pintura)."
+  },
+  {
+    "question": "¿Dónde están ubicados?",
+    "answer": "Estamos en Av. Siempreviva 742, zona centro. Atendemos con turno previo."
+  },
+  {
+    "question": "¿Cuáles son los horarios de atención?",
+    "answer": "Atendemos de lunes a viernes de 9 a 18 h y sábados de 9 a 13 h. Domingos cerrado."
+  },
+  {
+    "question": "¿Qué métodos de pago aceptan?",
+    "answer": "Aceptamos efectivo, transferencia bancaria y tarjetas de débito y crédito. Las tarjetas se pueden abonar hasta en 3 cuotas sin interés."
+  },
+  {
+    "question": "¿Necesito turno o puedo ir directamente?",
+    "answer": "Trabajamos solo con turno previo para garantizar el tiempo de cada moto. Podés reservar por este chat o por teléfono."
+  },
+  {
+    "question": "¿Cuánto cuesta el lavado premium?",
+    "answer": "El lavado premium cuesta $15.000 e incluye limpieza exterior, descontaminado de pintura y acondicionado de plásticos y cuero."
+  },
+  {
+    "question": "¿Cuánto cuesta el pulido?",
+    "answer": "El pulido arranca en $45.000 y varía según el estado de la pintura. Incluye corrección de rayones leves y sellado final."
+  },
+  {
+    "question": "¿Qué es el tratamiento cerámico y cuánto dura?",
+    "answer": "El tratamiento cerámico es un recubrimiento que protege la pintura y realza el brillo. Dura entre 2 y 5 años según el producto. El precio arranca en $80.000."
+  },
+  {
+    "question": "¿Qué es el PPF y para qué sirve?",
+    "answer": "El PPF es un film transparente que se coloca sobre la pintura para protegerla de piedrazos, rayones y el sol. Es ideal para tanque, guardabarros y zonas expuestas."
+  },
+  {
+    "question": "¿Cuánto tarda la instalación de PPF?",
+    "answer": "La instalación de PPF tarda entre 1 y 3 días según la cantidad de piezas. Te confirmamos el plazo exacto al ver la moto."
+  },
+  {
+    "question": "¿Hacen envíos o retiro a domicilio de la moto?",
+    "answer": "No hacemos envíos. La moto se deja y se retira en el taller en Av. Siempreviva 742."
+  },
+  {
+    "question": "¿Qué garantía tienen los trabajos?",
+    "answer": "El tratamiento cerámico tiene 1 año de garantía y el PPF tiene 5 años de garantía del fabricante contra amarillamiento y despegado."
+  },
+  {
+    "question": "¿Puedo cancelar o reprogramar un turno?",
+    "answer": "Sí, podés reprogramar o cancelar sin costo avisando con al menos 24 horas de anticipación."
+  },
+  {
+    "question": "¿Atienden todas las marcas y cilindradas?",
+    "answer": "Sí, trabajamos con todas las marcas y cilindradas, desde motos de calle hasta deportivas y custom."
+  }
+]

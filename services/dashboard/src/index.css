@@ -32,4 +32,27 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* xyflow token overrides — map the canvas onto the app's design tokens.
+   * The xyflow base stylesheet itself is imported from the lazy FlowEditor entry
+   * (import "@xyflow/react/dist/style.css") so it ships only in the editor chunk,
+   * keeping it off the home route (bundle isolation, VFB-01). */
+
+  /* Custom node components own their box (border/bg/ring/error). Reset xyflow's
+   * default node chrome so it does not double up with the component's box. */
+  .react-flow__node {
+    background: transparent;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+  }
+  .react-flow__edge-path {
+    stroke: hsl(var(--muted-foreground));
+  }
+  .react-flow__edge.selected .react-flow__edge-path {
+    stroke: hsl(var(--primary));
+  }
+  .react-flow__edge.flow-edge-error .react-flow__edge-path {
+    stroke: hsl(var(--destructive));
+  }
 }

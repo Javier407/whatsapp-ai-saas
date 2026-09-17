@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { RegisterUseCase } from '../../../application/auth/RegisterUseCase.js';
 import type { LoginUseCase } from '../../../application/auth/LoginUseCase.js';
 import { ok, sendDomainError } from '../reply.js';
+import { ValidationError } from '../../../domain/errors.js';
 
 interface AuthRoutesDeps {
   registerUseCase: RegisterUseCase;
@@ -18,10 +19,14 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesDeps> = async (fastify, op
     Body: { tenant_name: string; email: string; password: string };
   }>('/register', async (request, reply) => {
     try {
+      const { tenant_name, email, password } = request.body ?? {};
+      if (!tenant_name || !email || !password) {
+        throw new ValidationError('tenant_name, email and password are required');
+      }
       const result = await opts.registerUseCase.execute({
-        tenantName: request.body.tenant_name,
-        email: request.body.email,
-        password: request.body.password,
+        tenantName: tenant_name,
+        email,
+        password,
       });
 
       const token = fastify.jwt.sign(
@@ -44,10 +49,14 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesDeps> = async (fastify, op
     Body: { email: string; password: string; tenant_slug: string };
   }>('/login', async (request, reply) => {
     try {
+      const { email, password, tenant_slug } = request.body ?? {};
+      if (!email || !password || !tenant_slug) {
+        throw new ValidationError('email, password and tenant_slug are required');
+      }
       const result = await opts.loginUseCase.execute({
-        email: request.body.email,
-        password: request.body.password,
-        tenantSlug: request.body.tenant_slug,
+        email,
+        password,
+        tenantSlug: tenant_slug,
       });
 
       const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();

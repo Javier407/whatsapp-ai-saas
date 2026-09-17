@@ -1,9 +1,11 @@
-"""Unit tests for the chunk_text recursive splitter."""
+"""Unit tests for the chunk_text recursive splitter and chunk_faq."""
 from __future__ import annotations
+
+import json
 
 import pytest
 
-from rag_indexer.application.index_document import chunk_text
+from rag_indexer.application.index_document import chunk_faq, chunk_text
 
 
 class TestChunkText:
@@ -65,3 +67,48 @@ class TestChunkText:
         # All content is accounted for
         total = "".join(result)
         assert word in total or len(total) >= len(word)
+
+
+class TestChunkFaq:
+    def test_one_chunk_per_pair(self) -> None:
+        faq = [
+            {"question": "What are your hours?", "answer": "9 to 6, Mon-Fri."},
+            {"question": "Do you ship?", "answer": "Yes, nationwide."},
+            {"question": "Returns?", "answer": "30 days."},
+        ]
+        result = chunk_faq(json.dumps(faq).encode())
+        assert len(result) == 3
+        assert all(c.startswith("Q: ") and "\nA: " in c for c in result)
+
+    def test_short_faq_does_not_collapse_into_one_chunk(self) -> None:
+        # The whole FAQ is < 512 chars; the generic text path would yield 1 chunk.
+        faq = [
+            {"question": "A?", "answer": "1."},
+            {"question": "B?", "answer": "2."},
+        ]
+        result = chunk_faq(json.dumps(faq).encode())
+        assert len(result) == 2
+
+    def test_oversized_pair_is_split(self) -> None:
+        faq = [{"question": "Long?", "answer": "word " * 200}]  # ~1000 chars
+        result = chunk_faq(json.dumps(faq).encode(), chunk_size=200, overlap=0)
+        assert len(result) > 1
+
+    def test_blank_entries_skipped(self) -> None:
+        faq = [
+            {"question": "", "answer": ""},
+            {"question": "Real?", "answer": "Yes."},
+        ]
+        result = chunk_faq(json.dumps(faq).encode())
+        assert len(result) == 1
+
+    def test_invalid_json_raises_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            chunk_faq(b"{not valid json")
+
+    def test_non_list_json_raises_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            chunk_faq(json.dumps({"question": "x", "answer": "y"}).encode())
+
+    def test_empty_list_returns_empty(self) -> None:
+        assert chunk_faq(b"[]") == []

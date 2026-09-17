@@ -6,10 +6,8 @@ export class GetFlowUseCase {
   constructor(private readonly flowRepo: IFlowRepo) {}
 
   async execute(tenantId: string, flowId: string): Promise<FlowWithNodes> {
-    const flow = await this.flowRepo.findById(flowId);
-    if (!flow || flow.tenantId !== tenantId) {
-      throw new NotFoundError('Flow', flowId);
-    }
+    const flow = await this.flowRepo.findByIdForTenant(tenantId, flowId);
+    if (!flow) throw new NotFoundError('Flow', flowId);
     return flow;
   }
 }

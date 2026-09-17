@@ -9,7 +9,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Only declare a JSON body when one is actually sent. Fastify rejects
+      // requests that set Content-Type: application/json with an empty body
+      // (e.g. DELETE, or POST actions with no payload) with a 400.
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
@@ -19,6 +22,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     localStorage.removeItem("token");
     window.location.href = "/login";
     throw new Error("Unauthorized");
+  }
+
+  // 204 No Content (e.g. successful DELETE) has no body to parse.
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   const body = await res.json();
@@ -31,10 +39,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export type LoginResponse = { token: string; tenant_id: string; expires_at: string };
 
 export const auth = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, tenantSlug: string) =>
     request<LoginResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, tenant_slug: tenantSlug }),
     }),
 };
 
@@ -48,6 +56,11 @@ export type Tenant = {
   status: string;
   waba_id: string | null;
   phone_number_id: string | null;
+  whatsapp: {
+    connected: boolean;
+    waba_id: string | null;
+    phone_number_id: string | null;
+  } | null;
 };
 
 export const tenant = {
@@ -79,9 +92,43 @@ export type Flow = {
   updated_at: string;
 };
 
+export type FlowNodeDto = {
+  id: string;
+  node_key: string;
+  type:
+    | "message"
+    | "interactive"
+    | "collect_input"
+    | "condition"
+    | "rag_lookup"
+    | "llm_generate"
+    | "api_call"
+    | "book_appointment"
+    | "end";
+  config: Record<string, unknown>;
+  transitions: Array<{ next: string; condition?: string }>;
+  meta: { position?: { x: number; y: number } } & Record<string, unknown>;
+};
+
+export type FlowWithNodes = Flow & { nodes: FlowNodeDto[] };
+
+export type UpdateFlowDto = {
+  name?: string;
+  description?: string;
+  trigger?: Record<string, unknown>;
+  entry_node?: string;
+  nodes?: Array<{
+    node_key: string;
+    type: FlowNodeDto["type"];
+    config: Record<string, unknown>;
+    transitions: Array<{ next: string; condition?: string }>;
+    meta?: Record<string, unknown>;
+  }>;
+};
+
 export const flows = {
   list: () => request<Flow[]>("/flows"),
-  get: (id: string) => request<Flow>(`/flows/${id}`),
+  get: (id: string) => request<FlowWithNodes>(`/flows/${id}`),
   create: (data: unknown) =>
     request<Flow>("/flows", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: unknown) =>
@@ -110,8 +157,12 @@ export const kb = {
   upload: (file: File, sourceType: string) => {
     const token = getToken();
     const form = new FormData();
-    form.append("file", file);
+    // Text fields MUST come before the file part: the backend reads them from
+    // the multipart stream via request.file(), and fields after the file are
+    // not yet parsed. The backend also requires a `name` field.
+    form.append("name", file.name);
     form.append("source_type", sourceType);
+    form.append("file", file);
     return fetch(`${BASE}/kb/documents`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -140,6 +191,8 @@ export type ConversationLog = {
   created_at: string;
 };
 
+export type SessionState = { state: string | null; handoff: boolean };
+
 export const conversations = {
   list: (params?: { wa_id?: string; from?: string; to?: string; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -147,20 +200,75 @@ export const conversations = {
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     if (params?.limit) qs.set("limit", String(params.limit));
+    // The route returns the list directly; request() already unwraps `data`.
     return request<ConversationLog[]>(`/conversations?${qs}`);
   },
+  getState: (waId: string) =>
+    request<SessionState>(`/conversations/${encodeURIComponent(waId)}/state`),
+  reply: (waId: string, message: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+  resume: (waId: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/resume`, {
+      method: "POST",
+    }),
+  takeover: (waId: string) =>
+    request<{ status: string }>(`/conversations/${encodeURIComponent(waId)}/takeover`, {
+      method: "POST",
+    }),
+};
+
+// ── Appointments ──────────────────────────────────────────────────────────────
+
+export type Appointment = {
+  id: string;
+  wa_id: string;
+  customer_name: string | null;
+  service: string | null;
+  appointment_date: string | null;
+  status: string;
+  created_at: string;
+};
+
+export const appointments = {
+  list: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<Appointment[]>(`/appointments?${qs}`);
+  },
+  updateStatus: (id: string, status: string) =>
+    request<Appointment>(`/appointments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };
 
 // ── Dry-run ───────────────────────────────────────────────────────────────────
 
 export type DryRunResult = {
   reply: string;
-  flow_id: string | null;
-  trace: unknown[];
+  session_state: string;
+  sent: { type: string; to: string; text?: string }[];
 };
 
+// flow-engine returns { session_state, current_node, slots, sent: [...] };
+// flatten the sent messages into a single reply string for display.
 export const dryRun = (message: string, simulated_wa_id = "test-preview") =>
-  request<DryRunResult>("/dry-run", {
+  request<{
+    session_state: string;
+    current_node: string | null;
+    slots: Record<string, unknown>;
+    sent: { type: string; to: string; text?: string }[];
+  }>("/dry-run", {
     method: "POST",
     body: JSON.stringify({ message, simulated_wa_id }),
-  });
+  }).then((r) => ({
+    reply:
+      r.sent.map((s) => s.text).filter(Boolean).join("\n\n") ||
+      "(sin respuesta)",
+    session_state: r.session_state,
+    sent: r.sent,
+  }));

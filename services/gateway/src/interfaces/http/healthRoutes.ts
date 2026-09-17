@@ -11,6 +11,9 @@ export interface HealthRouteDeps {
  *   GET /healthz — liveness probe (always 200 if process is up)
  *   GET /readyz  — readiness probe (pings Redis; 503 if unreachable)
  */
+// Fastify plugin contract (FastifyPluginAsync): the async signature is the
+// plugin's type, even though route registration itself is synchronous.
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function healthRoutes(
   fastify: FastifyInstance,
   deps: HealthRouteDeps,
@@ -30,7 +33,7 @@ export async function healthRoutes(
       try {
         const pong = await redis.ping();
         if (pong !== 'PONG') {
-          throw new Error(`Unexpected Redis PING response: ${pong}`);
+          throw new Error(`Unexpected Redis PING response: ${String(pong)}`);
         }
         await reply.status(200).send({ status: 'ok', redis: 'ok' });
       } catch (err) {

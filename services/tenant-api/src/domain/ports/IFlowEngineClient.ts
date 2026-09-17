@@ -4,7 +4,20 @@ export interface DryRunResult {
   trace: unknown[];
 }
 
+export interface SessionStateResult {
+  state: string | null;
+  handoff: boolean;
+}
+
 export interface IFlowEngineClient {
   reloadTenantFlows(tenantId: string): Promise<void>;
   dryRun(tenantId: string, message: string, simulatedWaId: string): Promise<DryRunResult>;
+  /** Send an agent's reply to the customer as the business (during handoff). */
+  sendAgentReply(tenantId: string, waId: string, message: string): Promise<void>;
+  /** Hand the conversation back to the bot (clear HUMAN_HANDOFF). */
+  resumeHandoff(tenantId: string, waId: string): Promise<void>;
+  /** Pause the bot so a human agent owns the conversation. */
+  takeoverHandoff(tenantId: string, waId: string): Promise<void>;
+  /** Current session state for a conversation (drives the agent inbox UI). */
+  getSessionState(tenantId: string, waId: string): Promise<SessionStateResult>;
 }

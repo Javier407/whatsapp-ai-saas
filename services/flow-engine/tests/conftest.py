@@ -32,7 +32,7 @@ def _make_flow(
             id="node-start",
             node_type="message",
             config={"content": "Hello!"},
-            transitions=[{"condition": "default", "next_node": "node-end"}],
+            transitions=[{"condition": {"type": "always"}, "next": "node-end"}],
         )
         nodes = {"node-start": start_node, "node-end": end_node}
 

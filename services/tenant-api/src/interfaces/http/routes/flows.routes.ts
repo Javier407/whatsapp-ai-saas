@@ -46,6 +46,7 @@ export const flowsRoutes: FastifyPluginAsync<FlowRoutesDeps> = async (fastify, o
         type: string;
         config: Record<string, unknown>;
         transitions: Array<{ next: string; condition?: string }>;
+        meta?: Record<string, unknown>;
       }>;
     };
   }>('/', async (request, reply) => {
@@ -60,6 +61,7 @@ export const flowsRoutes: FastifyPluginAsync<FlowRoutesDeps> = async (fastify, o
           type: n.type as never,
           config: n.config,
           transitions: n.transitions,
+          meta: n.meta,
         })),
       });
       ok(reply, flow, 201);
@@ -91,6 +93,7 @@ export const flowsRoutes: FastifyPluginAsync<FlowRoutesDeps> = async (fastify, o
         type: string;
         config: Record<string, unknown>;
         transitions: Array<{ next: string; condition?: string }>;
+        meta?: Record<string, unknown>;
       }>;
     };
   }>('/:id', async (request, reply) => {
@@ -109,6 +112,7 @@ export const flowsRoutes: FastifyPluginAsync<FlowRoutesDeps> = async (fastify, o
             type: n.type as never,
             config: n.config,
             transitions: n.transitions,
+            meta: n.meta,
           })),
         },
       );

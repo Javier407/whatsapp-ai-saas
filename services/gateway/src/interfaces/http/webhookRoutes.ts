@@ -29,6 +29,9 @@ export interface WebhookRouteDeps {
  * - All downstream processing (tenant lookup, enqueue) runs asynchronously
  *   and errors are caught + logged without affecting the 200 response.
  */
+// Fastify plugin contract (FastifyPluginAsync): the async signature is the
+// plugin's type, even though route registration itself is synchronous.
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function webhookRoutes(
   fastify: FastifyInstance,
   deps: WebhookRouteDeps,
@@ -50,7 +53,11 @@ export async function webhookRoutes(
         (req as FastifyRequest & { rawBody?: Buffer }).rawBody = body as Buffer;
         done(null, parsed);
       } catch (err) {
-        done(err instanceof Error ? err : new Error(String(err)));
+        // Malformed JSON is a client error, not a server error. Without an
+        // explicit statusCode Fastify would surface a parser failure as 500.
+        const parseError = err instanceof Error ? err : new Error(String(err));
+        (parseError as Error & { statusCode?: number }).statusCode = 400;
+        done(parseError);
       }
     },
   );

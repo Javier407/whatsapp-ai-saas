@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { IConvLogRepo, ListConvLogsFilter, PaginatedResult } from '../../domain/ports/IConvLogRepo.js';
 import type { ConversationLog } from '../../domain/models/ConversationLog.js';
+import { withRls } from './withRls.js';
 
 function mapLog(row: {
   id: bigint;
@@ -47,15 +48,20 @@ export class PrismaConvLogRepo implements IConvLogRepo {
         : {}),
     };
 
-    const [rows, total] = await Promise.all([
-      this.prisma.conversationLog.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: filter.offset,
-        take: filter.limit,
-      }),
-      this.prisma.conversationLog.count({ where }),
-    ]);
+    const [rows, total] = await withRls(
+      this.prisma,
+      (tx) =>
+        Promise.all([
+          tx.conversationLog.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip: filter.offset,
+            take: filter.limit,
+          }),
+          tx.conversationLog.count({ where }),
+        ]),
+      filter.tenantId,
+    );
 
     return {
       data: rows.map(mapLog),

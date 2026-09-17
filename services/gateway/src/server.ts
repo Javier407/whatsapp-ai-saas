@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import type { Config } from './config.js';
@@ -18,7 +18,7 @@ const { Pool } = pg;
  * Composition root: all adapters are wired here and injected into use cases.
  * No DI container — the dependency graph is small enough for explicit wiring.
  */
-export async function buildApp(config: Config): Promise<ReturnType<typeof Fastify>> {
+export async function buildApp(config: Config): Promise<FastifyInstance> {
   const fastify = Fastify({
     logger: {
       level: config.LOG_LEVEL,

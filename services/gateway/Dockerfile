@@ -28,7 +28,9 @@ USER node
 
 EXPOSE 3000
 
+# 127.0.0.1, not localhost: Alpine resolves localhost to ::1 first and the
+# server listens on IPv4 only
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/healthz || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
 
 CMD ["node", "dist/main.js"]

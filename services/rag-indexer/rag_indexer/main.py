@@ -48,8 +48,10 @@ class _JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        if record.exc_info:
+            base["exc_info"] = self.formatException(record.exc_info)
         # Merge any extra keys passed via `extra={}`
-        reserved = logging.LogRecord("", 0, "", 0, "", [], None).__dict__.keys()
+        reserved = logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
         for key, value in record.__dict__.items():
             if key not in reserved and not key.startswith("_"):
                 base[key] = value
@@ -60,7 +62,8 @@ def _configure_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
     root = logging.getLogger()
-    root.setLevel(level)
+    # LOG_LEVEL is shared with the Node services, which use lowercase names
+    root.setLevel(level.upper())
     root.handlers = [handler]
 
 

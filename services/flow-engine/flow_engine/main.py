@@ -27,6 +27,7 @@ from flow_engine.config import Config, load_config
 from flow_engine.infrastructure.chroma.chroma_retriever import ChromaRetriever
 from flow_engine.infrastructure.llm.langchain_llm import LangChainLLMPort
 from flow_engine.infrastructure.meta.meta_send_client import MetaSendClient
+from flow_engine.infrastructure.postgres.postgres_appointment_repo import PostgresAppointmentRepo
 from flow_engine.infrastructure.postgres.postgres_conv_log import PostgresConvLogRepo
 from flow_engine.infrastructure.postgres.postgres_flow_repo import PostgresFlowRepo
 from flow_engine.infrastructure.postgres.postgres_tenant_credentials_repo import PostgresTenantCredentialsRepo
@@ -50,7 +51,9 @@ class _JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        reserved = logging.LogRecord("", 0, "", 0, "", [], None).__dict__.keys()
+        if record.exc_info:
+            base["exc_info"] = self.formatException(record.exc_info)
+        reserved = logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
         for key, value in record.__dict__.items():
             if key not in reserved and not key.startswith("_"):
                 base[key] = value
@@ -61,7 +64,8 @@ def _configure_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
     root = logging.getLogger()
-    root.setLevel(level)
+    # LOG_LEVEL is shared with the Node services, which use lowercase names
+    root.setLevel(level.upper())
     root.handlers = [handler]
 
 
@@ -108,12 +112,15 @@ def main() -> None:
         model=cfg.openai_model,
     )
 
+    appointment_repo = PostgresAppointmentRepo(connection_string=cfg.database_url)
+
     executor = FlowExecutor(
         flow_repo=flow_repo,
         meta_send=meta_send,
         vector_store=vector_store,
         llm=llm,
         conv_log_repo=conv_log_repo,
+        appointment_repo=appointment_repo,
     )
 
     consumer = FlowEngineConsumer(
@@ -135,6 +142,10 @@ def main() -> None:
             "chroma_retriever": vector_store,
             "db_url": cfg.database_url,
             "internal_token": cfg.internal_token,
+            # Needed by the handoff agent-reply / resume endpoints
+            "meta_send": meta_send,
+            "tenant_credentials_repo": tenant_credentials_repo,
+            "conv_log_repo": conv_log_repo,
         }
     )
 

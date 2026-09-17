@@ -8,10 +8,10 @@ export interface CreateKbDocumentInput {
 }
 
 export interface IKbDocumentRepo {
-  findById(id: string): Promise<KbDocument | null>;
+  findById(tenantId: string, id: string): Promise<KbDocument | null>;
   listByTenant(tenantId: string): Promise<KbDocument[]>;
   countByTenant(tenantId: string): Promise<number>;
   create(input: CreateKbDocumentInput): Promise<KbDocument>;
   updateStatus(id: string, status: DocumentStatus, errorMessage?: string): Promise<KbDocument>;
-  delete(id: string): Promise<void>;
+  delete(tenantId: string, id: string): Promise<void>;
 }

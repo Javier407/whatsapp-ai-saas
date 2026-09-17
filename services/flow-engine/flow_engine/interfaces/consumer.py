@@ -14,19 +14,19 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import socket
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 import redis
 
 from flow_engine.application.flow_executor import FlowExecutor
-from flow_engine.domain.models import ConversationTurn, InboundMessage, Session
+from flow_engine.domain.models import InboundMessage, Session
 from flow_engine.domain.ports import IConvLogRepo, ISessionRepo, ITenantCredentialsRepo
 from flow_engine.infrastructure.redis.redis_lock import (
     RedisLock,
-    SessionLockError,
     is_processed,
     mark_processed,
 )
@@ -40,7 +40,38 @@ _XCLAIM_IDLE_MS = 10 * 60 * 1_000
 _XCLAIM_CHECK_INTERVAL_S = 60
 _READ_COUNT = 5
 _RATE_LIMIT = 30     # messages per minute per tenant
-_RATE_LIMIT_MSG = "I'm temporarily busy. Please try again in a minute."
+
+# Customer-facing copy → Spanish default (deployment language), env-overridable.
+_RATE_LIMIT_MSG = os.environ.get(
+    "RATE_LIMIT_MESSAGE",
+    "Estamos recibiendo muchos mensajes. Danos un minuto y volvemos contigo.",
+)
+
+# Messages older than this are dropped without a reply. Meta retries webhook
+# delivery for hours while the stack is down, so on startup a burst of stale
+# messages arrives at once; answering them (or rate-limit-spamming the
+# customer) hours later is worse than staying silent.
+_MAX_MESSAGE_AGE_S = int(os.environ.get("MESSAGE_MAX_AGE_SECONDS", "900"))
+
+
+def _is_stale(timestamp: str, now: float | None = None) -> bool:
+    """True if the inbound message is older than _MAX_MESSAGE_AGE_S.
+
+    Accepts Meta's unix-seconds strings ("1716224041") and ISO-8601 datetimes.
+    Unparseable timestamps are treated as fresh (better to over-answer than to
+    silently drop live traffic on a format change).
+    """
+    if not timestamp:
+        return False
+    now_s = now if now is not None else time.time()
+    try:
+        if timestamp.isdigit():
+            msg_s = float(timestamp)
+        else:
+            msg_s = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
+    except (ValueError, OverflowError):
+        return False
+    return (now_s - msg_s) > _MAX_MESSAGE_AGE_S
 
 
 class FlowEngineConsumer:
@@ -99,12 +130,17 @@ class FlowEngineConsumer:
         self._ensure_groups(stream_keys)
 
         try:
-            results = self._redis.xreadgroup(
-                groupname=self.GROUP_NAME,
-                consumername=self.CONSUMER_NAME,
-                streams={k: ">" for k in stream_keys},
-                count=_READ_COUNT,
-                block=_BLOCK_MS,
+            # Sync redis client: xreadgroup returns a list at runtime, but
+            # redis-py types it with the async union (Awaitable | T).
+            results = cast(
+                "list[Any] | None",
+                self._redis.xreadgroup(
+                    groupname=self.GROUP_NAME,
+                    consumername=self.CONSUMER_NAME,
+                    streams={k: ">" for k in stream_keys},
+                    count=_READ_COUNT,
+                    block=_BLOCK_MS,
+                ),
             )
         except redis.RedisError:
             logger.exception("XREADGROUP error")
@@ -168,18 +204,29 @@ class FlowEngineConsumer:
             self._ack(stream_key, message_id)
             return
 
+        # 2b. Staleness guard: drop backlog messages delivered long after they
+        # were sent (Meta retries for hours while the stack is down). No reply.
+        if _is_stale(msg.timestamp):
+            logger.info("Stale message — dropping without reply", extra=log_extra)
+            mark_processed(self._redis, message_id)
+            self._ack(stream_key, message_id)
+            return
+
         # 3. Rate limit
         if not self._check_rate_limit(msg.tenant_id):
             logger.warning("Rate limit exceeded", extra={"tenant_id": msg.tenant_id})
-            try:
-                self._meta_send.send_text(
-                    phone_number_id=msg.phone_number_id,
-                    to=msg.wa_id,
-                    text=_RATE_LIMIT_MSG,
-                    access_token=msg.access_token,
-                )
-            except Exception:
-                logger.exception("Failed to send rate-limit notice", extra=log_extra)
+            # Notify the customer at most once per minute — a burst must not
+            # turn into a wall of identical "busy" messages.
+            if self._should_send_rate_notice(msg.tenant_id, msg.wa_id):
+                try:
+                    self._meta_send.send_text(
+                        phone_number_id=msg.phone_number_id,
+                        to=msg.wa_id,
+                        text=_RATE_LIMIT_MSG,
+                        access_token=msg.access_token,
+                    )
+                except Exception:
+                    logger.exception("Failed to send rate-limit notice", extra=log_extra)
             self._ack(stream_key, message_id)
             return
 
@@ -205,20 +252,8 @@ class FlowEngineConsumer:
             # 7. Save session
             self._session_repo.save(session)
 
-            # 8. Write conversation log (inbound + outbound turns)
-            now_str = datetime.now(timezone.utc).isoformat()
-            self._conv_log_repo.write(
-                ConversationTurn(
-                    tenant_id=msg.tenant_id,
-                    wa_id=msg.wa_id,
-                    flow_id=session.flow_id,
-                    direction="inbound",
-                    message_text="",  # PII — not stored
-                    node_id=session.current_node,
-                    llm_tokens=0,
-                    created_at=now_str,
-                )
-            )
+            # 8. Conversation logging now happens inside the executor
+            #    (inbound + outbound turns, with content) — see FlowExecutor._write_conv_log
 
         except Exception:
             logger.exception("Processing error", extra=log_extra)
@@ -233,11 +268,21 @@ class FlowEngineConsumer:
         self._ack(stream_key, message_id)
         logger.info("Message processed", extra=log_extra)
 
+    def _should_send_rate_notice(self, tenant_id: str, wa_id: str) -> bool:
+        """True only for the first over-limit message per contact per minute."""
+        # Key stays under rate:tenant:* so the flow_engine_user ACL allows it.
+        key = f"rate:tenant:{tenant_id}:notice:{wa_id}"
+        try:
+            return bool(self._redis.set(key, "1", nx=True, ex=60))
+        except redis.RedisError:
+            logger.exception("Rate-notice dedupe failed — suppressing notice")
+            return False
+
     def _check_rate_limit(self, tenant_id: str) -> bool:
         minute_bucket = math.floor(time.time() / 60)
         key = f"rate:tenant:{tenant_id}:minute:{minute_bucket}"
         try:
-            count = self._redis.incr(key)
+            count = cast(int, self._redis.incr(key))
             if count == 1:
                 self._redis.expire(key, 120)
             return count <= _RATE_LIMIT
@@ -247,7 +292,9 @@ class FlowEngineConsumer:
 
     def _reenqueue(self, stream_key: str, fields: dict[str, str]) -> None:
         try:
-            self._redis.xadd(stream_key, fields, maxlen=10_000, approximate=True)
+            # redis-py's xadd fields type is invariant and rejects dict[str, str];
+            # str keys/values are valid stream fields at runtime.
+            self._redis.xadd(stream_key, fields, maxlen=10_000, approximate=True)  # type: ignore[arg-type]
         except redis.RedisError:
             logger.exception("Failed to re-enqueue message", extra={"stream": stream_key})
 
@@ -262,7 +309,7 @@ class FlowEngineConsumer:
 
     def _discover_streams(self) -> list[str]:
         try:
-            keys = self._redis.keys(self.STREAM_PATTERN)
+            keys = cast("list[Any]", self._redis.keys(self.STREAM_PATTERN))
             return [k.decode() if isinstance(k, bytes) else k for k in keys]
         except redis.RedisError:
             logger.exception("Failed to discover streams")
@@ -282,13 +329,16 @@ class FlowEngineConsumer:
     def _xclaim_stuck_messages(self) -> None:
         for stream_key in self._discover_streams():
             try:
-                result = self._redis.xautoclaim(
-                    stream_key,
-                    self.GROUP_NAME,
-                    self.CONSUMER_NAME,
-                    _XCLAIM_IDLE_MS,
-                    start="0-0",
-                    count=10,
+                result = cast(
+                    "list[Any]",
+                    self._redis.xautoclaim(
+                        stream_key,
+                        self.GROUP_NAME,
+                        self.CONSUMER_NAME,
+                        _XCLAIM_IDLE_MS,
+                        start_id="0-0",
+                        count=10,
+                    ),
                 )
                 claimed = result[1] if result else []
                 for message_id, fields in claimed:

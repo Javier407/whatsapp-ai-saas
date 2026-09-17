@@ -6,7 +6,7 @@ Embedder model: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import chromadb
 
@@ -45,10 +45,12 @@ class ChromaRetriever(IVectorStore):
         query_embedding: list[float] = self._embedder.embed([query_text])[0]
 
         try:
+            # chromadb's stubs demand ndarray / IncludeEnum types; plain
+            # lists of floats and strings are accepted at runtime.
             results = collection.query(
-                query_embeddings=[query_embedding],
+                query_embeddings=cast("Any", [query_embedding]),
                 n_results=min(top_k, 20),
-                include=["documents", "distances"],
+                include=cast("Any", ["documents", "distances"]),
             )
         except Exception:
             logger.exception(
@@ -57,8 +59,10 @@ class ChromaRetriever(IVectorStore):
             )
             return []
 
-        docs: list[str] = results["documents"][0] if results.get("documents") else []
-        distances: list[float] = results["distances"][0] if results.get("distances") else []
+        document_rows = results.get("documents")
+        distance_rows = results.get("distances")
+        docs: list[str] = document_rows[0] if document_rows else []
+        distances: list[float] = distance_rows[0] if distance_rows else []
 
         # Convert cosine distance [0, 2] to similarity score [0, 1]
         return [(doc, max(0.0, 1.0 - dist)) for doc, dist in zip(docs, distances)]

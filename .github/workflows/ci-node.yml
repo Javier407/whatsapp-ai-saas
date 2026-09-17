@@ -21,26 +21,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # corepack/pnpm must be enabled BEFORE setup-node, because setup-node's
+      # `cache: pnpm` needs the pnpm executable on PATH to resolve the cache.
+      - name: Enable pnpm
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: services/gateway/pnpm-lock.yaml
 
-      - name: Enable pnpm
-        run: corepack enable
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - name: Lint
         run: pnpm lint
 
       - name: Test with coverage
-        run: pnpm test -- --coverage
+        run: pnpm test:coverage
 
       - name: Coverage gate (80% application layer)
-        run: pnpm exec jest --coverage --coverageThreshold='{"global":{"lines":80}}'
+        # jest runs ESM test files, so it needs the vm-modules flag the package
+        # scripts set; invoking jest directly here, we must pass it ourselves.
+        run: NODE_OPTIONS='--experimental-vm-modules' pnpm exec jest --coverage --coverageThreshold='{"./src/application/":{"lines":80,"functions":80,"statements":80,"branches":70}}'
 
   tenant-api:
     name: tenant-api — lint + test
@@ -52,20 +56,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # corepack/pnpm must be enabled BEFORE setup-node, because setup-node's
+      # `cache: pnpm` needs the pnpm executable on PATH to resolve the cache.
+      - name: Enable pnpm
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: services/tenant-api/pnpm-lock.yaml
 
-      - name: Enable pnpm
-        run: corepack enable
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
+
+      # Prisma Client is generated code (not committed). Without this, every
+      # typed model call resolves to `any` — breaking both lint and tests.
+      - name: Generate Prisma Client
+        run: pnpm prisma generate
 
       - name: Lint
         run: pnpm lint
 
       - name: Test with coverage
-        run: pnpm test -- --coverage
+        run: pnpm test:coverage

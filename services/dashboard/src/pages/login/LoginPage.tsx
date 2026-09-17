@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const schema = z.object({
+  tenantSlug: z.string().min(1, "Obligatorio"),
   email: z.string().email("Correo inválido"),
   password: z.string().min(1, "Obligatorio"),
 });
@@ -33,7 +34,7 @@ export function LoginPage() {
   async function onSubmit(data: FormData) {
     setError(null);
     try {
-      const res = await auth.login(data.email, data.password);
+      const res = await auth.login(data.email, data.password, data.tenantSlug);
       login(res.token);
       toast.success("Sesión iniciada");
       navigate("/flows");
@@ -60,6 +61,19 @@ export function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenantSlug">Slug del negocio</Label>
+              <Input
+                id="tenantSlug"
+                type="text"
+                placeholder="mi-negocio"
+                autoComplete="organization"
+                {...register("tenantSlug")}
+              />
+              {errors.tenantSlug && (
+                <p className="text-xs text-destructive">{errors.tenantSlug.message}</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Correo electrónico</Label>
               <Input

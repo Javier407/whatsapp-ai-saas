@@ -9,9 +9,8 @@ interface KbRoutesDeps {
   uploadDocumentUseCase: UploadDocumentUseCase;
   listDocumentsUseCase: ListDocumentsUseCase;
   deleteDocumentUseCase: DeleteDocumentUseCase;
+  maxFileSizeBytes: number;
 }
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export const kbRoutes: FastifyPluginAsync<KbRoutesDeps> = async (fastify, opts) => {
   fastify.addHook('preHandler', fastify.authenticate);
@@ -20,7 +19,7 @@ export const kbRoutes: FastifyPluginAsync<KbRoutesDeps> = async (fastify, opts) 
   fastify.post('/documents', async (request, reply) => {
     try {
       const data = await request.file({
-        limits: { fileSize: MAX_FILE_SIZE },
+        limits: { fileSize: opts.maxFileSizeBytes },
       });
 
       if (!data) {

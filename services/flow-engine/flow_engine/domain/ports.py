@@ -30,6 +30,14 @@ class ITenantCredentialsRepo(ABC):
     @abstractmethod
     def get_access_token(self, tenant_id: str, phone_number_id: str) -> str | None: ...
 
+    @abstractmethod
+    def get_credentials(self, tenant_id: str) -> tuple[str, str] | None:
+        """Return (phone_number_id, access_token) for a tenant, or None.
+
+        Used when only the tenant is known (e.g. an agent reply during handoff).
+        """
+        ...
+
 
 class IMetaSendPort(ABC):
     @abstractmethod
@@ -64,6 +72,20 @@ class IVectorStore(ABC):
 class IConvLogRepo(ABC):
     @abstractmethod
     def write(self, turn: ConversationTurn) -> None: ...
+
+
+class IAppointmentRepo(ABC):
+    @abstractmethod
+    def create(
+        self,
+        tenant_id: str,
+        wa_id: str,
+        customer_name: str | None,
+        service: str | None,
+        appointment_date: str | None,
+    ) -> None:
+        """Persist a booked appointment; also upserts the customer record."""
+        ...
 
 
 class ILLMPort(ABC):

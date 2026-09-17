@@ -4,6 +4,7 @@ import type {
   CreateKbDocumentInput,
 } from '../../domain/ports/IKbDocumentRepo.js';
 import type { KbDocument, DocumentStatus } from '../../domain/models/KbDocument.js';
+import { withRls } from './withRls.js';
 
 function mapDoc(row: {
   id: string;
@@ -34,32 +35,50 @@ function mapDoc(row: {
 export class PrismaKbDocumentRepo implements IKbDocumentRepo {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findById(id: string): Promise<KbDocument | null> {
-    const row = await this.prisma.knowledgeBaseDocument.findUnique({ where: { id } });
+  async findById(tenantId: string, id: string): Promise<KbDocument | null> {
+    const row = await withRls(
+      this.prisma,
+      (tx) => tx.knowledgeBaseDocument.findUnique({ where: { id } }),
+      tenantId,
+    );
     return row ? mapDoc(row) : null;
   }
 
   async listByTenant(tenantId: string): Promise<KbDocument[]> {
-    const rows = await this.prisma.knowledgeBaseDocument.findMany({
-      where: { tenantId },
-      orderBy: { uploadedAt: 'desc' },
-    });
+    const rows = await withRls(
+      this.prisma,
+      (tx) =>
+        tx.knowledgeBaseDocument.findMany({
+          where: { tenantId },
+          orderBy: { uploadedAt: 'desc' },
+        }),
+      tenantId,
+    );
     return rows.map(mapDoc);
   }
 
   async countByTenant(tenantId: string): Promise<number> {
-    return this.prisma.knowledgeBaseDocument.count({ where: { tenantId } });
+    return withRls(
+      this.prisma,
+      (tx) => tx.knowledgeBaseDocument.count({ where: { tenantId } }),
+      tenantId,
+    );
   }
 
   async create(input: CreateKbDocumentInput): Promise<KbDocument> {
-    const row = await this.prisma.knowledgeBaseDocument.create({
-      data: {
-        tenantId: input.tenantId,
-        name: input.name,
-        sourceType: input.sourceType as never,
-        storageUri: input.storageUri,
-      },
-    });
+    const row = await withRls(
+      this.prisma,
+      (tx) =>
+        tx.knowledgeBaseDocument.create({
+          data: {
+            tenantId: input.tenantId,
+            name: input.name,
+            sourceType: input.sourceType as never,
+            storageUri: input.storageUri,
+          },
+        }),
+      input.tenantId,
+    );
     return mapDoc(row);
   }
 
@@ -68,18 +87,24 @@ export class PrismaKbDocumentRepo implements IKbDocumentRepo {
     status: DocumentStatus,
     errorMessage?: string,
   ): Promise<KbDocument> {
-    const row = await this.prisma.knowledgeBaseDocument.update({
-      where: { id },
-      data: {
-        status: status as never,
-        ...(errorMessage !== undefined && { errorMessage }),
-        ...(status === 'indexed' && { indexedAt: new Date() }),
-      },
-    });
+    const row = await withRls(this.prisma, (tx) =>
+      tx.knowledgeBaseDocument.update({
+        where: { id },
+        data: {
+          status: status as never,
+          ...(errorMessage !== undefined && { errorMessage }),
+          ...(status === 'indexed' && { indexedAt: new Date() }),
+        },
+      }),
+    );
     return mapDoc(row);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.prisma.knowledgeBaseDocument.delete({ where: { id } });
+  async delete(tenantId: string, id: string): Promise<void> {
+    await withRls(
+      this.prisma,
+      (tx) => tx.knowledgeBaseDocument.delete({ where: { id } }),
+      tenantId,
+    );
   }
 }

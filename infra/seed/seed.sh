@@ -214,6 +214,14 @@ cat > "$FAQ_FILE" <<'FAQEOF'
 ]
 FAQEOF
 
+# Git Bash/MSYS: the ;type= suffix defeats MSYS path auto-conversion, so the
+# native curl cannot read POSIX-style /tmp paths — hand it a Windows path.
+if command -v cygpath >/dev/null 2>&1; then
+  FAQ_FILE_CURL=$(cygpath -m "$FAQ_FILE")
+else
+  FAQ_FILE_CURL=$FAQ_FILE
+fi
+
 KB_BODY=$(mktemp /tmp/waas-seed-XXXXXX.tmp)
 KB_HTTP=$(curl -s \
   -o "$KB_BODY" \
@@ -222,7 +230,7 @@ KB_HTTP=$(curl -s \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   -F "name=FAQ" \
   -F "source_type=faq_json" \
-  -F "file=@${FAQ_FILE};type=application/json")
+  -F "file=@${FAQ_FILE_CURL};type=application/json")
 
 if [ "$KB_HTTP" != "201" ] && [ "$KB_HTTP" != "200" ]; then
   log_error "KB upload failed (HTTP ${KB_HTTP}): $(cat "$KB_BODY")"

@@ -17,17 +17,15 @@ export class UpdateFlowUseCase {
     flowId: string,
     input: UpdateFlowInput,
   ): Promise<FlowWithNodes> {
-    const existing = await this.flowRepo.findById(flowId);
-    if (!existing || existing.tenantId !== tenantId) {
-      throw new NotFoundError('Flow', flowId);
-    }
+    const existing = await this.flowRepo.findByIdForTenant(tenantId, flowId);
+    if (!existing) throw new NotFoundError('Flow', flowId);
 
     // Validate the merged graph before creating a new version
     const nodes = input.nodes ?? existing.nodes;
     const entryNode = input.entryNode ?? existing.entryNode;
     this.validator.validate({ entryNode, nodes });
 
-    const updated = await this.flowRepo.createNewVersion(flowId, input);
+    const updated = await this.flowRepo.createNewVersion(tenantId, flowId, input);
 
     this.flowEngineClient.reloadTenantFlows(tenantId).catch(() => undefined);
 
