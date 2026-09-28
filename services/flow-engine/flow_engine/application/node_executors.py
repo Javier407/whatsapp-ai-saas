@@ -38,6 +38,7 @@ class NodeResult:
     done: bool = False
     requires_user_input: bool = False  # True for message/interactive/collect_input
     llm_tokens: int = 0
+    sent_wamid: str | None = None      # Meta message id of the last outbound send
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +78,10 @@ def _ssrf_guard(url: str) -> None:
         raise NodeExecutionError("api_call", f"SSRF: blocked hostname {hostname!r}")
     try:
         addrs = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        raise NodeExecutionError("api_call", f"Cannot resolve hostname: {hostname!r}")
+    except socket.gaierror as exc:
+        raise NodeExecutionError(
+            "api_call", f"Cannot resolve hostname: {hostname!r}"
+        ) from exc
     for addr_info in addrs:
         ip_str = addr_info[4][0]
         try:
@@ -112,7 +115,7 @@ def execute_message(
     except (KeyError, ValueError):
         pass  # send as-is if slot not yet filled
 
-    deps.meta_send.send_text(
+    sent_wamid = deps.meta_send.send_text(
         phone_number_id=deps.phone_number_id,
         to=session.wa_id,
         text=content,
@@ -126,10 +129,11 @@ def execute_message(
             reply=content,
             next_node=None,
             requires_user_input=True,
+            sent_wamid=sent_wamid,
         )
 
     next_node = _first_transition(node, session)
-    return NodeResult(reply=content, next_node=next_node)
+    return NodeResult(reply=content, next_node=next_node, sent_wamid=sent_wamid)
 
 
 def execute_interactive(
@@ -155,13 +159,18 @@ def execute_interactive(
             "action": {"buttons": buttons},
         },
     }
-    deps.meta_send.send_interactive(
+    sent_wamid = deps.meta_send.send_interactive(
         phone_number_id=deps.phone_number_id,
         to=session.wa_id,
         payload=payload,
         access_token=deps.access_token,
     )
-    return NodeResult(reply=body_text, next_node=None, requires_user_input=True)
+    return NodeResult(
+        reply=body_text,
+        next_node=None,
+        requires_user_input=True,
+        sent_wamid=sent_wamid,
+    )
 
 
 def execute_collect_input(
@@ -178,31 +187,40 @@ def execute_collect_input(
 
     if not message_text:
         # First entry: send the prompt and wait
-        deps.meta_send.send_text(
+        prompt_wamid = deps.meta_send.send_text(
             phone_number_id=deps.phone_number_id,
             to=session.wa_id,
             text=prompt,
             access_token=deps.access_token,
         )
-        return NodeResult(reply=prompt, next_node=None, requires_user_input=True)
+        return NodeResult(
+            reply=prompt,
+            next_node=None,
+            requires_user_input=True,
+            sent_wamid=prompt_wamid,
+        )
 
     # User replied: validate and store
-    if validation_pattern:
-        if not re.fullmatch(validation_pattern, message_text, re.IGNORECASE):
-            session.retry_count += 1
-            if session.retry_count > 3:
-                return NodeResult(
-                    next_node=_transition_for_condition(node, "error"),
-                    done=False,
-                )
-            error_msg: str = config.get("validation_error", "Invalid input. Please try again.")
-            deps.meta_send.send_text(
-                phone_number_id=deps.phone_number_id,
-                to=session.wa_id,
-                text=error_msg,
-                access_token=deps.access_token,
+    if validation_pattern and not re.fullmatch(validation_pattern, message_text, re.IGNORECASE):
+        session.retry_count += 1
+        if session.retry_count > 3:
+            return NodeResult(
+                next_node=_transition_for_condition(node, "error"),
+                done=False,
             )
-            return NodeResult(reply=error_msg, next_node=None, requires_user_input=True)
+        error_msg: str = config.get("validation_error", "Invalid input. Please try again.")
+        error_wamid = deps.meta_send.send_text(
+            phone_number_id=deps.phone_number_id,
+            to=session.wa_id,
+            text=error_msg,
+            access_token=deps.access_token,
+        )
+        return NodeResult(
+            reply=error_msg,
+            next_node=None,
+            requires_user_input=True,
+            sent_wamid=error_wamid,
+        )
 
     slot_updates = {slot: message_text} if slot else {}
     next_node = _first_transition(node, session)
@@ -299,7 +317,7 @@ def execute_llm_generate(
         max_tokens=max_tokens,
     )
 
-    deps.meta_send.send_text(
+    sent_wamid = deps.meta_send.send_text(
         phone_number_id=deps.phone_number_id,
         to=session.wa_id,
         text=reply_text,
@@ -307,7 +325,12 @@ def execute_llm_generate(
     )
 
     next_node = _first_transition(node, session)
-    return NodeResult(reply=reply_text, next_node=next_node, llm_tokens=tokens)
+    return NodeResult(
+        reply=reply_text,
+        next_node=next_node,
+        llm_tokens=tokens,
+        sent_wamid=sent_wamid,
+    )
 
 
 def execute_api_call(
@@ -346,11 +369,11 @@ def execute_api_call(
         resp.raise_for_status()
         response_text = resp.text
     except httpx.HTTPStatusError as exc:
-        raise NodeExecutionError(node.id, f"HTTP {exc.response.status_code}")
-    except httpx.TimeoutException:
-        raise NodeExecutionError(node.id, "Request timed out after 10s")
+        raise NodeExecutionError(node.id, f"HTTP {exc.response.status_code}") from exc
+    except httpx.TimeoutException as exc:
+        raise NodeExecutionError(node.id, "Request timed out after 10s") from exc
     except httpx.RequestError as exc:
-        raise NodeExecutionError(node.id, str(exc))
+        raise NodeExecutionError(node.id, str(exc)) from exc
 
     next_node = _first_transition(node, session)
     return NodeResult(
@@ -368,19 +391,20 @@ def execute_end(
     """Send optional closing message; reset session state (keep history)."""
     config = node.config
     content: str | None = config.get("content")
+    sent_wamid: str | None = None
     if content:
         try:
             content = content.format_map(session.slots)
         except (KeyError, ValueError):
             pass
-        deps.meta_send.send_text(
+        sent_wamid = deps.meta_send.send_text(
             phone_number_id=deps.phone_number_id,
             to=session.wa_id,
             text=content,
             access_token=deps.access_token,
         )
 
-    return NodeResult(reply=content, done=True)
+    return NodeResult(reply=content, done=True, sent_wamid=sent_wamid)
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import psycopg2
 import psycopg2.extras
@@ -15,9 +14,11 @@ logger = logging.getLogger(__name__)
 class PostgresStatusRepo(IStatusRepo):
     """Updates knowledge_base_documents status in Postgres.
 
-    IMPORTANT: Every query on the tenant-scoped table must run within a
-    transaction that first executes ``SET LOCAL app.tenant_id = '{tenantId}'``.
-    This satisfies the Row-Level Security policy defined in migration 005.
+    IMPORTANT: every query on a tenant-scoped table runs inside a transaction
+    that first calls ``SELECT set_config('app.tenant_id', %s, true)`` with the
+    tenant id bound as a parameter. This satisfies the Row-Level Security
+    policy defined in migration 005 without ever interpolating the value into
+    SQL text.
     The heartbeat is NOT tenant-scoped (written to worker_heartbeats).
     """
 
@@ -27,19 +28,18 @@ class PostgresStatusRepo(IStatusRepo):
     def _connect(self) -> psycopg2.extensions.connection:
         return psycopg2.connect(self._conn_string, cursor_factory=psycopg2.extras.RealDictCursor)
 
-    def get_status(self, tenant_id: str, document_id: str) -> Optional[str]:
+    def get_status(self, tenant_id: str, document_id: str) -> str | None:
         """Return the current status of a document, or None if not found."""
-        with self._connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
-                cur.execute(
-                    "SELECT status FROM knowledge_base_documents WHERE id = %s AND tenant_id = %s",
-                    (document_id, tenant_id),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    return None
-                return row["status"]
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+            cur.execute(
+                "SELECT status FROM knowledge_base_documents WHERE id = %s AND tenant_id = %s",
+                (document_id, tenant_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return row["status"]
 
     def set_indexing(self, tenant_id: str, document_id: str) -> None:
         """Transition document to 'indexing' status."""
@@ -49,7 +49,7 @@ class PostgresStatusRepo(IStatusRepo):
         """Transition document to 'indexed' and record chunk_count + indexed_at."""
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
+                cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
                 cur.execute(
                     """
                     UPDATE knowledge_base_documents
@@ -75,7 +75,7 @@ class PostgresStatusRepo(IStatusRepo):
         """Transition document to 'failed' and record error_message."""
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
+                cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
                 cur.execute(
                     """
                     UPDATE knowledge_base_documents
@@ -96,7 +96,7 @@ class PostgresStatusRepo(IStatusRepo):
     def _update_status(self, tenant_id: str, document_id: str, status: str) -> None:
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SET LOCAL app.tenant_id = %s", (tenant_id,))
+                cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
                 cur.execute(
                     """
                     UPDATE knowledge_base_documents

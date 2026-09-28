@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import chromadb
 
@@ -24,8 +25,19 @@ def _collection_name(tenant_id: str) -> str:
 class ChromaVectorStore(IVectorStore):
     """Stores and retrieves document chunk embeddings via ChromaDB HTTP API."""
 
-    def __init__(self, host: str, port: int) -> None:
-        self._client = chromadb.HttpClient(host=host, port=port)
+    def __init__(self, host: str, port: int, auth_token: str) -> None:
+        # ChromaDB runs with token authentication (audit finding H3). The client
+        # performs an authenticated identity call while being constructed, so a
+        # missing or wrong token raises from inside the SDK — this guard turns
+        # that into a named error naming the cause, before the consumer loop
+        # starts and reports it as a per-document failure.
+        if not auth_token:
+            raise ValueError("ChromaVectorStore requires a non-empty auth_token")
+        self._client = chromadb.HttpClient(
+            host=host,
+            port=port,
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
 
     def upsert(self, tenant_id: str, chunks: list[DocumentChunk]) -> None:
         """Upsert all chunks into the tenant's ChromaDB collection."""
@@ -40,7 +52,11 @@ class ChromaVectorStore(IVectorStore):
 
         collection.upsert(
             ids=[c.id for c in chunks],
-            embeddings=[c.embedding for c in chunks],
+            # chromadb's stub types this as a union of numpy arrays and
+            # sequences of numbers. A list of float lists is accepted at runtime
+            # (it is what the HTTP API takes) but mypy cannot match the union,
+            # so the value is cast rather than narrowed.
+            embeddings=cast(Any, [c.embedding for c in chunks]),
             documents=[c.text for c in chunks],
             metadatas=[
                 {
@@ -67,8 +83,8 @@ class ChromaVectorStore(IVectorStore):
                 "ChromaDB delete complete",
                 extra={"collection": collection_name, "document_id": document_id},
             )
-        except Exception:
-            # Collection may not exist yet — that is fine
+        except Exception:  # noqa: BLE001 — the collection may simply not exist
+            # yet; deletion is idempotent and must not fail the job.
             logger.debug(
                 "ChromaDB delete skipped (collection not found)",
                 extra={"collection": collection_name},

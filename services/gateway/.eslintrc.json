@@ -2,7 +2,7 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "project": "./tsconfig.json",
+    "project": ["./tsconfig.json", "./tsconfig.test.json"],
     "ecmaVersion": 2022,
     "sourceType": "module"
   },
@@ -24,5 +24,31 @@
     "node": true,
     "es2022": true
   },
+  "overrides": [
+    {
+      "files": ["src/interfaces/http/**/*.ts"],
+      "rules": {
+        // Fastify plugin factories and route handlers are async by contract,
+        // and decorators they receive are closures rather than methods that
+        // need `this`. Both rules fire on the framework's idioms, not on bugs.
+        "@typescript-eslint/require-await": "off",
+        "@typescript-eslint/unbound-method": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        // jest.spyOn/expect(mock.method) reference methods deliberately, and
+        // test doubles are necessarily partially typed.
+        "@typescript-eslint/unbound-method": "off",
+        "@typescript-eslint/require-await": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-argument": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-return": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist/", "dist-test/", "node_modules/", "*.js"]
 }

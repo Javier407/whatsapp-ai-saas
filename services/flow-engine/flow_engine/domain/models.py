@@ -20,7 +20,7 @@ class Session:
     last_msg_at: str  # ISO datetime
 
     @classmethod
-    def new(cls, tenant_id: str, wa_id: str, now: str) -> "Session":
+    def new(cls, tenant_id: str, wa_id: str, now: str) -> Session:
         return cls(
             tenant_id=tenant_id,
             wa_id=wa_id,
@@ -50,7 +50,7 @@ class Session:
         }
 
     @classmethod
-    def from_hash(cls, data: dict[str, str]) -> "Session":
+    def from_hash(cls, data: dict[str, str]) -> Session:
         """Deserialize from Redis Hash fields."""
         return cls(
             tenant_id=data["tenant_id"],
@@ -91,10 +91,33 @@ class ConversationTurn:
     wa_id: str
     flow_id: str | None
     direction: Literal["inbound", "outbound"]
-    message_text: str
-    node_id: str | None
+    message_type: str                      # text | interactive | status | ...
+    content: dict[str, Any]                # JSONB payload (no message body by default)
+    node_key: str | None
     llm_tokens: int
+    latency_ms: int | None
     created_at: str
+
+
+@dataclass
+class MessageStatusEvent:
+    """A Meta delivery/read/failure callback for a previously sent message."""
+
+    tenant_id: str
+    wamid: str                             # Meta message id the status refers to
+    status: str                            # sent | delivered | read | failed | ...
+    recipient_id: str | None = None
+    occurred_at: str | None = None         # ISO 8601
+    error_code: str | None = None
+    error_title: str | None = None
+    conversation_id: str | None = None
+    pricing_category: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def idempotency_key(self) -> str:
+        """Stable key for deduplicating Meta's repeated status deliveries."""
+        return f"status:{self.wamid}:{self.status}:{self.occurred_at or ''}"
 
 
 @dataclass
@@ -106,11 +129,11 @@ class InboundMessage:
     text: str
     timestamp: str
     access_token: str  # decrypted at consumer, passed through
+    wamid: str = ""  # Meta message id — the idempotency key (H10)
+    message_type: str = "text"
 
     @classmethod
-    def from_stream_fields(cls, fields: dict[str, str]) -> "InboundMessage":
-        import json as _json
-        payload = _json.loads(fields.get("payload", "{}"))
+    def from_stream_fields(cls, fields: dict[str, str]) -> InboundMessage:
         return cls(
             message_id=fields["message_id"],
             tenant_id=fields["tenant_id"],
@@ -119,4 +142,6 @@ class InboundMessage:
             text=fields.get("text", ""),
             timestamp=fields.get("timestamp", ""),
             access_token=fields.get("access_token", ""),
+            wamid=fields.get("wamid", ""),
+            message_type=fields.get("message_type", "text"),
         )

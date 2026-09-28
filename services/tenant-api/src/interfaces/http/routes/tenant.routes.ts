@@ -2,7 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { GetTenantUseCase } from '../../../application/tenant/GetTenantUseCase.js';
 import type { UpdateTenantUseCase } from '../../../application/tenant/UpdateTenantUseCase.js';
 import type { ConnectWhatsAppUseCase } from '../../../application/tenant/ConnectWhatsAppUseCase.js';
-import { ok, sendDomainError } from '../reply.js';
+import { invalidRequest, ok, sendDomainError } from '../reply.js';
+import {
+  connectWhatsAppBodySchema,
+  formatIssues,
+  updateTenantBodySchema,
+} from '../validation.js';
 
 interface TenantRoutesDeps {
   getTenantUseCase: GetTenantUseCase;
@@ -11,7 +16,7 @@ interface TenantRoutesDeps {
 }
 
 export const tenantRoutes: FastifyPluginAsync<TenantRoutesDeps> = async (fastify, opts) => {
-  // All routes require JWT auth
+  // Every route requires JWT auth.
   fastify.addHook('preHandler', fastify.authenticate);
 
   /**
@@ -40,9 +45,15 @@ export const tenantRoutes: FastifyPluginAsync<TenantRoutesDeps> = async (fastify
    * PATCH /api/v1/tenant
    */
   fastify.patch<{ Body: { name: string } }>('/', async (request, reply) => {
+    const parsed = updateTenantBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      invalidRequest(reply, formatIssues(parsed.error));
+      return;
+    }
+
     try {
       const tenant = await opts.updateTenantUseCase.execute(request.tenantId, {
-        name: request.body.name,
+        name: parsed.data.name,
       });
       ok(reply, { id: tenant.id, name: tenant.name, plan: tenant.plan, status: tenant.status });
     } catch (err) {
@@ -52,23 +63,33 @@ export const tenantRoutes: FastifyPluginAsync<TenantRoutesDeps> = async (fastify
 
   /**
    * POST /api/v1/tenant/whatsapp/connect
+   *
+   * Manual onboarding path (no Embedded Signup). The credentials are now
+   * verified against Meta before being stored, and the caller must be
+   * owner/admin because this rebinds the tenant's messaging channel.
    */
   fastify.post<{
     Body: { waba_id: string; phone_number_id: string; access_token: string };
-  }>('/whatsapp/connect', async (request, reply) => {
-    try {
-      const tenant = await opts.connectWhatsAppUseCase.execute(request.tenantId, {
-        wabaId: request.body.waba_id,
-        phoneNumberId: request.body.phone_number_id,
-        accessToken: request.body.access_token,
-      });
-      ok(reply, {
-        id: tenant.id,
-        waba_id: tenant.wabaId,
-        phone_number_id: tenant.phoneNumberId,
-      });
-    } catch (err) {
-      sendDomainError(reply, err);
-    }
-  });
+  }>(
+    '/whatsapp/connect',
+    { preHandler: [fastify.authorize('owner', 'admin')] },
+    async (request, reply) => {
+      const parsed = connectWhatsAppBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        invalidRequest(reply, formatIssues(parsed.error));
+        return;
+      }
+
+      try {
+        const result = await opts.connectWhatsAppUseCase.execute(request.tenantId, {
+          wabaId: parsed.data.waba_id,
+          phoneNumberId: parsed.data.phone_number_id,
+          accessToken: parsed.data.access_token,
+        });
+        ok(reply, result);
+      } catch (err) {
+        sendDomainError(reply, err);
+      }
+    },
+  );
 };

@@ -51,7 +51,7 @@
 | LangChain | 0.3.x | LLM provider abstraction; history trimming; retriever composition |
 | PostgreSQL | 16 | Row Level Security for multi-tenant isolation; JSONB for flow graphs |
 | Redis | 7 | Streams (async queue) + sessions + tenant lookup cache; AOF durability |
-| ChromaDB | 0.5 | Per-tenant vector collections; simple HTTP interface; no schema migrations |
+| ChromaDB | 0.5 | Per-tenant vector collections; bearer-token authentication; no schema migrations |
 | MinIO | latest | S3-compatible local storage for KB documents; replaced by S3 in prod |
 | Caddy | 2 | Automatic HTTPS (Let's Encrypt); reverse proxy to gateway and tenant-api |
 | sentence-transformers | 2.7+ | Local CPU embeddings (all-MiniLM-L6-v2); zero marginal cost |
@@ -122,9 +122,11 @@ Copy `infra/.env.example` to `infra/.env` and fill in the values below.
 | `JWT_SECRET` | tenant-api | HS256 signing secret (min 32 chars) | YES | `openssl rand -hex 32` |
 | `MASTER_KEY` | tenant-api, flow-engine | AES-256 key for encrypting WhatsApp access tokens at rest (min 32 bytes) | YES | `openssl rand -hex 32` |
 | `INTERNAL_API_TOKEN` | tenant-api, flow-engine | Shared secret for tenant-api → flow-engine admin calls | YES | `openssl rand -hex 32` |
-| `DATABASE_URL` | tenant-api | PostgreSQL connection string (app_user, no BYPASSRLS) | YES | `postgresql://app_user:pass@postgres:5432/saas` |
+| `DATABASE_URL` | tenant-api, flow-engine, gateway, rag-indexer | PostgreSQL connection string (app_runtime, no SUPERUSER / BYPASSRLS, so RLS applies) | YES | `postgresql://app_runtime:pass@postgres:5432/saas` |
+| `DATABASE_MIGRATION_URL` | tenant-api | Migration connection string (app_user, owns the schema) | YES | `postgresql://app_user:pass@postgres:5432/saas` |
 | `REDIS_URL` | all services | Redis connection string | YES | `redis://:pass@redis:6379/0` |
-| `CHROMA_HOST` | flow-engine, rag-indexer | ChromaDB service hostname | YES | `chromadb` |
+| `CHROMADB_HOST` | flow-engine, rag-indexer | ChromaDB service hostname | YES | `chromadb` |
+| `CHROMA_AUTH_TOKEN` | chromadb, flow-engine, rag-indexer | Bearer token for ChromaDB; the server refuses to start without it | YES | `openssl rand -hex 32` |
 | `S3_ENDPOINT` | tenant-api, rag-indexer | MinIO/S3 endpoint | YES | `http://minio:9000` |
 | `S3_BUCKET_KB` | tenant-api, rag-indexer | Bucket for knowledge base documents | YES | `kb-documents` |
 | `S3_ACCESS_KEY` | tenant-api, rag-indexer | MinIO/S3 access key | YES | `minioadmin` |
@@ -304,6 +306,13 @@ For a single-VPS deployment (Fly.io or DigitalOcean Droplet, 4 vCPU / 8 GB RAM):
 5. Start all services: `docker compose -f infra/docker-compose.yml up -d`.
 6. In Meta App Dashboard, set the webhook URL to `https://your-domain/webhook`.
 7. Validate with `make smoke` and a real WhatsApp message.
+
+Only Caddy listens on a routable address. Postgres, Redis, ChromaDB, MinIO, Loki
+and Grafana are published to `127.0.0.1` only (reach them with an SSH tunnel, or
+your own compose override), and gateway/tenant-api follow `APP_BIND_ADDRESS`,
+loopback by default, because Caddy proxies them over the compose network rather
+than through the host. `python3 infra/e2e/verify_port_bindings.py` enforces this
+and CI runs it.
 
 See [docs/runbook.md](docs/runbook.md) for the complete operations playbook, including log access, rolling updates, backups, and troubleshooting.
 

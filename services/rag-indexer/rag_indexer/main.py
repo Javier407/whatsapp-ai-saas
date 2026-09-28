@@ -49,7 +49,7 @@ class _JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         # Merge any extra keys passed via `extra={}`
-        reserved = logging.LogRecord("", 0, "", 0, "", [], None).__dict__.keys()
+        reserved = logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()
         for key, value in record.__dict__.items():
             if key not in reserved and not key.startswith("_"):
                 base[key] = value
@@ -70,14 +70,29 @@ def _configure_logging(level: str = "INFO") -> None:
 
 _REQUIRED_VARS = [
     "REDIS_URL",
-    "DATABASE_URL",
     "S3_ENDPOINT",
     "S3_ACCESS_KEY",
     "S3_SECRET_KEY",
     "S3_BUCKET_KB",
     "CHROMADB_HOST",
     "CHROMADB_PORT",
+    # ChromaDB runs with token authentication (audit finding H3): an
+    # unauthenticated vector store is reachable by anything that can resolve its
+    # port and holds every tenant's knowledge base.
+    "CHROMA_AUTH_TOKEN",
 ]
+
+# Accept either name; docker-compose injects POSTGRES_URL for this service
+# while this module previously only read DATABASE_URL (startup exit(1)).
+_DATABASE_URL_VARS = ("DATABASE_URL", "POSTGRES_URL")
+
+
+def _resolve_database_url() -> str | None:
+    for var in _DATABASE_URL_VARS:
+        value = os.environ.get(var)
+        if value:
+            return value
+    return None
 
 
 def _load_config() -> dict[str, str]:
@@ -89,8 +104,15 @@ def _load_config() -> dict[str, str]:
             missing.append(var)
         else:
             config[var] = value
+
+    database_url = _resolve_database_url()
+    if database_url is None:
+        missing.append("DATABASE_URL (or POSTGRES_URL)")
+    else:
+        config["DATABASE_URL"] = database_url
+
     if missing:
-        print(  # noqa: T201 — logging not yet configured
+        print(
             f"FATAL: missing required environment variables: {', '.join(missing)}",
             file=sys.stderr,
         )
@@ -149,6 +171,7 @@ def main() -> None:
     vector_store = ChromaVectorStore(
         host=config["CHROMADB_HOST"],
         port=int(config["CHROMADB_PORT"]),
+        auth_token=config["CHROMA_AUTH_TOKEN"],
     )
 
     status_repo = PostgresStatusRepo(connection_string=config["DATABASE_URL"])

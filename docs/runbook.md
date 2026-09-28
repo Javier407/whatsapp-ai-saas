@@ -83,12 +83,20 @@ XPENDING flow-engine:<tenant_id> flow-engine-workers - + 10
 
 ### Accessing ChromaDB directly
 
+ChromaDB requires the bearer token (`CHROMA_AUTH_TOKEN` in `infra/.env`). Every
+route except `/api/v1/heartbeat` answers `403` without it — the heartbeat is
+what the compose healthcheck polls, so liveness can still be checked
+anonymously.
+
 ```bash
-# ChromaDB HTTP API on port 8000 (internal network) or 18000 (host, if mapped in docker-compose)
-curl http://localhost:18000/api/v1/collections
+# ChromaDB HTTP API: 8000 on the compose network, 18000 for the verification
+# stack. Host access is loopback-only (audit finding H7), so from another
+# machine use an SSH tunnel: ssh -L 8000:127.0.0.1:8000 <host>
+curl -H "Authorization: Bearer <CHROMA_AUTH_TOKEN>" http://localhost:8000/api/v1/collections
 
 # Count vectors in a tenant's collection
-curl "http://localhost:18000/api/v1/collections/kb_<tenant_id_no_hyphens>/count"
+curl -H "Authorization: Bearer <CHROMA_AUTH_TOKEN>" \
+  "http://localhost:18000/api/v1/collections/tenant_<tenant_id_no_hyphens>/count"
 ```
 
 ---
@@ -311,7 +319,8 @@ FROM worker_heartbeats;
    ```bash
    curl -X POST http://flow-engine:8001/admin/flows/<tenant_id>/reload \
      -H "X-Internal-Token: <INTERNAL_API_TOKEN>"
-   # Or from the host (if flow-engine admin port is mapped):
+   # flow-engine's admin API is not published to the host (audit finding H7), so
+   # reach it from a container that shares the compose network:
    docker compose -f infra/docker-compose.yml exec tenant-api \
      curl -X POST http://flow-engine:8001/admin/flows/<tenant_id>/reload \
      -H "X-Internal-Token: $INTERNAL_API_TOKEN"

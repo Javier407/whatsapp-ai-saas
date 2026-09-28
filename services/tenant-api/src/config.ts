@@ -15,7 +15,27 @@ const configSchema = z.object({
   // JWT
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
 
-  // Encryption
+  // Meta onboarding (Embedded Signup / OAuth code exchange / webhook subscription)
+  // META_APP_ID and META_CONFIG_ID are only required to offer Embedded Signup;
+  // the manual connect path keeps working without them.
+  META_APP_ID: z.string().default(''),
+  META_APP_SECRET: z.string().default(''),
+  META_CONFIG_ID: z.string().default(''),
+  META_API_BASE: z
+    .string()
+    .url('META_API_BASE must be a valid URL')
+    .default('https://graph.facebook.com/v21.0'),
+  META_EMBEDDED_SIGNUP_REDIRECT_URI: z.string().default(''),
+  OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  META_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  // Reject onboarding unless the token provably manages the requested WABA.
+  // Disabling this re-opens the phone-number hijack vector (audit finding H2).
+  META_REQUIRE_OWNERSHIP_PROOF: z
+    .string()
+    .default('true')
+    .transform((v) => v === 'true' || v === '1'),
+
+  // Encryption (audit findings H1 + H6)
   MASTER_KEY: z
     .string()
     .min(32, 'MASTER_KEY must be at least 32 bytes (hex-encoded or raw)')
@@ -23,6 +43,18 @@ const configSchema = z.object({
       (v) => Buffer.from(v, 'utf8').length >= 32,
       'MASTER_KEY must encode to at least 32 bytes',
     ),
+  // Rotation. New ciphertexts carry MASTER_KEY_ID as their key id; setting
+  // MASTER_KEY_PREVIOUS keeps rows encrypted with the old key readable until
+  // scripts/reencrypt-access-tokens.ts has rewritten them.
+  MASTER_KEY_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,16}$/, 'MASTER_KEY_ID must be 1-16 chars of [A-Za-z0-9_-]')
+    .default('k1'),
+  MASTER_KEY_PREVIOUS: z.string().min(32).optional(),
+  MASTER_KEY_PREVIOUS_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,16}$/, 'MASTER_KEY_PREVIOUS_ID must be 1-16 chars of [A-Za-z0-9_-]')
+    .default('k0'),
 
   // MinIO / S3
   S3_ENDPOINT: z.string().min(1, 'S3_ENDPOINT is required'),

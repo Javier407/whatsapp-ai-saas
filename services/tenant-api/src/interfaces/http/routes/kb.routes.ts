@@ -2,8 +2,9 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { UploadDocumentUseCase } from '../../../application/kb/UploadDocumentUseCase.js';
 import type { ListDocumentsUseCase } from '../../../application/kb/ListDocumentsUseCase.js';
 import type { DeleteDocumentUseCase } from '../../../application/kb/DeleteDocumentUseCase.js';
-import { ok, sendDomainError } from '../reply.js';
+import { ok, sendDomainError, unsupportedMediaType } from '../reply.js';
 import { ValidationError } from '../../../domain/errors.js';
+import { requireUuidParam } from '../validation.js';
 
 interface KbRoutesDeps {
   uploadDocumentUseCase: UploadDocumentUseCase;
@@ -16,8 +17,20 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const kbRoutes: FastifyPluginAsync<KbRoutesDeps> = async (fastify, opts) => {
   fastify.addHook('preHandler', fastify.authenticate);
 
+  // Uploads and deletions mutate tenant data and enqueue indexing work;
+  // require owner/admin (audit finding H5).
+  const ownerOrAdmin = [fastify.authorize('owner', 'admin')];
+
   /** POST /api/v1/kb/documents (multipart) */
-  fastify.post('/documents', async (request, reply) => {
+  fastify.post('/documents', { preHandler: ownerOrAdmin }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      unsupportedMediaType(
+        reply,
+        'Expected multipart/form-data with a file part plus name and source_type fields',
+      );
+      return;
+    }
+
     try {
       const data = await request.file({
         limits: { fileSize: MAX_FILE_SIZE },
@@ -71,12 +84,19 @@ export const kbRoutes: FastifyPluginAsync<KbRoutesDeps> = async (fastify, opts) 
   });
 
   /** DELETE /api/v1/kb/documents/:id */
-  fastify.delete<{ Params: { id: string } }>('/documents/:id', async (request, reply) => {
-    try {
-      await opts.deleteDocumentUseCase.execute(request.tenantId, request.params.id);
-      ok(reply, null, 204);
-    } catch (err) {
-      sendDomainError(reply, err);
-    }
-  });
+  fastify.delete<{ Params: { id: string } }>(
+    '/documents/:id',
+    { preHandler: ownerOrAdmin },
+    async (request, reply) => {
+      const id = requireUuidParam(reply, request.params.id);
+      if (id === null) return;
+
+      try {
+        await opts.deleteDocumentUseCase.execute(request.tenantId, id);
+        ok(reply, null, 204);
+      } catch (err) {
+        sendDomainError(reply, err);
+      }
+    },
+  );
 };
