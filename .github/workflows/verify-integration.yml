@@ -71,6 +71,12 @@ jobs:
             docker image inspect "$image" > /dev/null
           done
 
+      # Covers audit finding H7: every published port except Caddy's must be
+      # loopback-only. Needs no running stack — it reads `docker compose
+      # config`, which is also where the APP_BIND_ADDRESS default shows up.
+      - name: Port bindings (nothing but Caddy is routable)
+        run: python3 infra/e2e/verify_port_bindings.py
+
       # Brings the stack up, applies infra/migrations/*.sql in order, and waits
       # for tenant-api. `docker compose up` on its own leaves an empty database,
       # so every query would fail with "relation ... does not exist".

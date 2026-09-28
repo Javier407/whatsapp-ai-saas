@@ -307,6 +307,13 @@ For a single-VPS deployment (Fly.io or DigitalOcean Droplet, 4 vCPU / 8 GB RAM):
 6. In Meta App Dashboard, set the webhook URL to `https://your-domain/webhook`.
 7. Validate with `make smoke` and a real WhatsApp message.
 
+Only Caddy listens on a routable address. Postgres, Redis, ChromaDB, MinIO, Loki
+and Grafana are published to `127.0.0.1` only (reach them with an SSH tunnel, or
+your own compose override), and gateway/tenant-api follow `APP_BIND_ADDRESS`,
+loopback by default, because Caddy proxies them over the compose network rather
+than through the host. `python3 infra/e2e/verify_port_bindings.py` enforces this
+and CI runs it.
+
 See [docs/runbook.md](docs/runbook.md) for the complete operations playbook, including log access, rolling updates, backups, and troubleshooting.
 
 ## Roadmap (v2)
