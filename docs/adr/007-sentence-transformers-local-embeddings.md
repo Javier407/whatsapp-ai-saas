@@ -1,6 +1,6 @@
 # ADR-007: sentence-transformers Local Embeddings as Default
 
-**Status:** Accepted
+**Status:** Accepted — the default model (all-MiniLM-L6-v2) was superseded by [ADR-008](008-multilingual-e5-small-embeddings.md); local CPU embeddings remain the approach.
 **Date:** 2026-05-17
 
 ## Context

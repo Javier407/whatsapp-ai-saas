@@ -54,7 +54,7 @@
 | ChromaDB | 0.5 | Per-tenant vector collections; simple HTTP interface; no schema migrations |
 | MinIO | latest | S3-compatible local storage for KB documents; replaced by S3 in prod |
 | Caddy | 2 | Automatic HTTPS (Let's Encrypt); reverse proxy to gateway and tenant-api |
-| sentence-transformers | 2.7+ | Local CPU embeddings (all-MiniLM-L6-v2); zero marginal cost |
+| sentence-transformers | 2.7+ | Local CPU multilingual embeddings (`intfloat/multilingual-e5-small`, see [ADR-008](docs/adr/008-multilingual-e5-small-embeddings.md)); zero marginal cost |
 | argon2id | — | Password hashing with memory-hard properties |
 
 ## Getting Started

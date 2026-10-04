@@ -10,7 +10,8 @@ This directory contains Architecture Decision Records (ADRs) for the WhatsApp AI
 | [ADR-004](004-fastify-over-express.md) | Fastify over Express for Node.js Services | Accepted |
 | [ADR-005](005-hexagonal-architecture.md) | Hexagonal Architecture in All Services | Accepted |
 | [ADR-006](006-jwt-hs256-for-mvp-auth.md) | JWT HS256 for MVP Auth | Accepted |
-| [ADR-007](007-sentence-transformers-local-embeddings.md) | sentence-transformers Local Embeddings as Default | Accepted |
+| [ADR-007](007-sentence-transformers-local-embeddings.md) | sentence-transformers Local Embeddings as Default | Accepted (model superseded by ADR-008) |
+| [ADR-008](008-multilingual-e5-small-embeddings.md) | multilingual-e5-small as the Default Embedding Model | Accepted |
 
 ## Format
 

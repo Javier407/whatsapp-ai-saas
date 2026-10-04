@@ -356,6 +356,27 @@ nano infra/.env  # change GEMINI_API_KEY
 docker compose -f infra/docker-compose.yml up -d --no-deps flow-engine
 ```
 
+### Changing the embedding model (EMBEDDING_MODEL)
+
+Vectors from different models are not comparable, so every model writes to its own
+ChromaDB collection (`tenant_<id>_<sha1(model)[:8]>`). Until the documents are
+re-embedded, the knowledge base of that model is empty and the bot answers without
+KB context.
+
+```bash
+# 1. Set EMBEDDING_MODEL in infra/.env (same value for both services)
+# 2. Rebuild both images: the model is baked in at build time
+docker compose -f infra/docker-compose.yml build flow-engine rag-indexer
+docker compose -f infra/docker-compose.yml up -d --no-deps flow-engine rag-indexer
+
+# 3. Re-embed every indexed document (ARGS: --tenant <uuid>, --dry-run, --drop-legacy)
+make reindex ARGS="--dry-run"
+make reindex
+```
+
+Rollback: set `EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2` and rebuild.
+The old collections are kept (`tenant_<id>`) unless `--drop-legacy` was used.
+
 ### Revoking a tenant's WhatsApp access
 
 ```bash
