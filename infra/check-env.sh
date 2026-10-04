@@ -31,8 +31,19 @@ REQUIRED=(
   JWT_SECRET
   MASTER_KEY
   INTERNAL_API_TOKEN
-  OPENAI_API_KEY
 )
+
+# The LLM key depends on the chosen provider (default: gemini).
+provider_line="$(grep -E '^LLM_PROVIDER=' "${ENV_FILE}" | head -1 || true)"
+provider="${provider_line#*=}"
+case "${provider:-gemini}" in
+  openai) REQUIRED+=(OPENAI_API_KEY) ;;
+  gemini) REQUIRED+=(GEMINI_API_KEY) ;;
+  *)
+    echo "INVALID:     LLM_PROVIDER (use gemini or openai)"
+    REQUIRED+=(GEMINI_API_KEY)
+    ;;
+esac
 
 fail=0
 

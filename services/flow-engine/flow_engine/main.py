@@ -108,8 +108,9 @@ def main() -> None:
         embedder=embedder,
     )
     llm = LangChainLLMPort(
-        openai_api_key=cfg.openai_api_key,
-        model=cfg.openai_model,
+        provider=cfg.llm_provider,
+        api_key=cfg.llm_api_key,
+        model=cfg.llm_model,
     )
 
     appointment_repo = PostgresAppointmentRepo(connection_string=cfg.database_url)

@@ -145,5 +145,5 @@ When no active flow matches an inbound message, flow-engine falls back to a RAG 
 
 ### Environment
 
-All env vars are in `infra/.env` (copy from `infra/.env.example`). Required vars at minimum: `OPENAI_API_KEY`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `JWT_SECRET`, `MASTER_KEY`, `INTERNAL_API_TOKEN`. Redis has per-service ACL users with scoped permissions; passwords are in the env file and rendered into `infra/redis/users.acl` via `envsubst` at container start.
+All env vars are in `infra/.env` (copy from `infra/.env.example`). Required vars at minimum: `GEMINI_API_KEY` (default `LLM_PROVIDER=gemini`; `openai` + `OPENAI_API_KEY` also supported), `META_APP_SECRET`, `META_VERIFY_TOKEN`, `JWT_SECRET`, `MASTER_KEY`, `INTERNAL_API_TOKEN`. Redis has per-service ACL users with scoped permissions; passwords are in the env file and rendered into `infra/redis/users.acl` via `envsubst` at container start.
 

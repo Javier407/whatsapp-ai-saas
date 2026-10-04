@@ -346,11 +346,11 @@ sed -i "s/^MASTER_KEY=.*/MASTER_KEY=$NEW_KEY/" infra/.env
 docker compose -f infra/docker-compose.yml up -d --no-deps tenant-api flow-engine
 ```
 
-### Rotating OPENAI_API_KEY
+### Rotating GEMINI_API_KEY (or OPENAI_API_KEY)
 
 ```bash
 # 1. Update infra/.env
-nano infra/.env  # change OPENAI_API_KEY
+nano infra/.env  # change GEMINI_API_KEY
 
 # 2. Restart flow-engine (the only service using it)
 docker compose -f infra/docker-compose.yml up -d --no-deps flow-engine

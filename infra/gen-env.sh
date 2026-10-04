@@ -7,7 +7,7 @@
 #    if the dotted file does not exist yet.
 # 2. Creates infra/.env from the template, replacing every change_me
 #    placeholder (changeme_*, REPLACE_WITH_*) with `openssl rand -hex 32`.
-# 3. Leaves OPENAI_API_KEY for you to fill in manually.
+# 3. Leaves GEMINI_API_KEY (or OPENAI_API_KEY) for you to fill in manually.
 #
 # Refuses to overwrite an existing infra/.env.
 # -----------------------------------------------------------------------------
@@ -68,6 +68,6 @@ echo ""
 echo "Created ${ENV_FILE} with generated secrets."
 echo ""
 echo "NEXT STEPS (manual):"
-echo "  1. Set OPENAI_API_KEY to your real key."
+echo "  1. Set GEMINI_API_KEY to your real key (or LLM_PROVIDER=openai + OPENAI_API_KEY)."
 echo "  2. Set META_APP_SECRET to the real App Secret from Meta (the generated"
 echo "     value only works for local signed-webhook tests, not for real Meta)."

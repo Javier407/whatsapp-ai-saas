@@ -67,7 +67,7 @@
 - Python 3.12 (for local development outside Docker; use [pyenv](https://github.com/pyenv/pyenv))
 - `make`, `git`, `openssl` (available on Linux/macOS; Windows users: WSL2 recommended)
 - A Meta Developer account (for WhatsApp Cloud API — free sandbox available at [developers.facebook.com](https://developers.facebook.com))
-- An OpenAI API key (for LLM — gpt-4o-mini, approximately $0.001 per conversation)
+- A Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) for the LLM (default model alias `gemini-flash-latest`). OpenAI is also supported: set `LLM_PROVIDER=openai` and `OPENAI_API_KEY`.
 
 ### Quick Start
 
@@ -78,7 +78,7 @@ cd whatsapp-ai-saas
 
 # 2. Configure environment (generates every secret with openssl)
 bash infra/gen-env.sh
-# Edit infra/.env — set OPENAI_API_KEY and the real META_APP_SECRET
+# Edit infra/.env — set GEMINI_API_KEY and the real META_APP_SECRET
 bash infra/check-env.sh   # validates it without printing values
 
 # 3. Build service images
@@ -116,7 +116,10 @@ Copy `infra/.env.example` to `infra/.env` and fill in the values below.
 
 | Variable | Service | Description | Required | Example |
 |---|---|---|---|---|
-| `OPENAI_API_KEY` | flow-engine | OpenAI API key for LLM completions | YES | `sk-...` |
+| `LLM_PROVIDER` | flow-engine | `gemini` (default) or `openai` | no | `gemini` |
+| `LLM_MODEL` | flow-engine | Model name; empty = provider default (`gemini-flash-latest` / `gpt-4o-mini`) | no | `gemini-3.8-flash` |
+| `GEMINI_API_KEY` | flow-engine | Google AI Studio key for LLM completions | YES if `LLM_PROVIDER=gemini` | `AIza...` |
+| `OPENAI_API_KEY` | flow-engine | OpenAI key | YES if `LLM_PROVIDER=openai` | `sk-...` |
 | `META_APP_SECRET` | gateway, flow-engine | Meta App secret for HMAC-SHA256 webhook verification | YES | `openssl rand -hex 32` |
 | `META_VERIFY_TOKEN` | gateway | Token for Meta webhook handshake | YES | any random string |
 | `JWT_SECRET` | tenant-api | HS256 signing secret (min 32 chars) | YES | `openssl rand -hex 32` |
