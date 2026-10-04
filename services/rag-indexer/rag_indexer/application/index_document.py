@@ -226,15 +226,18 @@ class IndexDocumentUseCase:
         self._status_repo = status_repo
         self._embedder = embedder
 
-    def execute(self, job: IndexingJob) -> None:
+    def execute(self, job: IndexingJob, force: bool = False) -> None:
         """Process an indexing job end-to-end.
 
         Status lifecycle: pending → indexing → indexed | failed
         Raises on failure after persisting the failed status.
+
+        ``force`` re-indexes a document that is already ``indexed`` (used by the
+        reindex command after an embedding-model change).
         """
         # Idempotency: skip if already indexed
         current_status = self._status_repo.get_status(job.tenant_id, job.document_id)
-        if current_status == "indexed":
+        if current_status == "indexed" and not force:
             logger.info(
                 "Document already indexed — skipping",
                 extra={"document_id": job.document_id, "tenant_id": job.tenant_id},

@@ -27,7 +27,7 @@ class IndexingJob:
             storage_uri=fields["storage_uri"],
             source_type=fields["source_type"],
             name=fields.get("name", ""),
-            embedder=fields.get("embedder", "all-MiniLM-L6-v2"),
+            embedder=fields.get("embedder", "multilingual-e5-small"),
             enqueued_at=fields.get("enqueued_at", ""),
         )
 

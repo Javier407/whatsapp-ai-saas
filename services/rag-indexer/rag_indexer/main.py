@@ -3,7 +3,7 @@
 Startup sequence:
 1. Load and validate configuration from env vars (fail fast on missing)
 2. Configure JSON structured logging
-3. Initialise LocalEmbedder (loads ~90 MB model — do this BEFORE the consumer loop)
+3. Initialise LocalEmbedder (loads the EMBEDDING_MODEL, ~470 MB — do this BEFORE the consumer loop)
 4. Start heartbeat as a daemon thread
 5. Start IndexingConsumer (blocking)
 """
@@ -22,7 +22,7 @@ import redis
 from rag_indexer.application.index_document import IndexDocumentUseCase
 from rag_indexer.consumer import IndexingConsumer
 from rag_indexer.infrastructure.chroma_store import ChromaVectorStore
-from rag_indexer.infrastructure.embedder import LocalEmbedder
+from rag_indexer.infrastructure.embedder import LocalEmbedder, embedding_model_name
 from rag_indexer.infrastructure.minio_store import MinioDocumentStore
 from rag_indexer.infrastructure.postgres_repo import PostgresStatusRepo
 
@@ -152,6 +152,7 @@ def main() -> None:
     vector_store = ChromaVectorStore(
         host=config["CHROMADB_HOST"],
         port=int(config["CHROMADB_PORT"]),
+        embedding_model=embedding_model_name(),
     )
 
     status_repo = PostgresStatusRepo(connection_string=config["DATABASE_URL"])
