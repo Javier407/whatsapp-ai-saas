@@ -6,7 +6,7 @@
 # 1. Renames infra/env.example → infra/.env.example (canonical committed name)
 #    if the dotted file does not exist yet.
 # 2. Creates infra/.env from the template, replacing every change_me
-#    placeholder with `openssl rand -hex 32`.
+#    placeholder (changeme_*, REPLACE_WITH_*) with `openssl rand -hex 32`.
 # 3. Leaves OPENAI_API_KEY for you to fill in manually.
 #
 # Refuses to overwrite an existing infra/.env.
@@ -42,14 +42,18 @@ if [ -f "${ENV_FILE}" ]; then
   exit 1
 fi
 
+# Placeholders used by .env.example: changeme_* and REPLACE_WITH_* (legacy
+# change_me* / sk-change-me* are still recognised). `openssl` reads </dev/null so
+# it can never consume the template that the while-loop is reading from stdin.
+# MINIO_ROOT_USER is a username, not a secret, so it keeps its default.
 while IFS= read -r line; do
   case "${line}" in
-    *=change_me*|*=sk-change-me*)
+    *=changeme_*|*=REPLACE_WITH_*|*=change_me*|*=sk-change-me*)
       key="${line%%=*}"
       if [ "${key}" = "OPENAI_API_KEY" ]; then
         printf '%s\n' "${line}"
       else
-        printf '%s=%s\n' "${key}" "$(openssl rand -hex 32)"
+        printf '%s=%s\n' "${key}" "$(openssl rand -hex 32 </dev/null)"
       fi
       ;;
     *)
@@ -63,4 +67,7 @@ chmod 600 "${ENV_FILE}" 2>/dev/null || true
 echo ""
 echo "Created ${ENV_FILE} with generated secrets."
 echo ""
-echo "NEXT STEP (manual): edit infra/.env and set OPENAI_API_KEY to your real key."
+echo "NEXT STEPS (manual):"
+echo "  1. Set OPENAI_API_KEY to your real key."
+echo "  2. Set META_APP_SECRET to the real App Secret from Meta (the generated"
+echo "     value only works for local signed-webhook tests, not for real Meta)."

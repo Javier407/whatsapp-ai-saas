@@ -73,13 +73,13 @@
 
 ```bash
 # 1. Clone and enter
-git clone https://github.com/[TODO: YOUR_USERNAME]/whatsapp-ai-saas.git
+git clone https://github.com/Javier407/whatsapp-ai-saas.git
 cd whatsapp-ai-saas
 
-# 2. Configure environment
-cp infra/.env.example infra/.env
-# Edit infra/.env — at minimum set OPENAI_API_KEY and APP_SECRET
-# Generate secrets: openssl rand -hex 32
+# 2. Configure environment (generates every secret with openssl)
+bash infra/gen-env.sh
+# Edit infra/.env — set OPENAI_API_KEY and the real META_APP_SECRET
+bash infra/check-env.sh   # validates it without printing values
 
 # 3. Build service images
 make build
