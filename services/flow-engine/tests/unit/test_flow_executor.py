@@ -244,6 +244,49 @@ class TestMaxIterationGuard:
         assert session.state == "ERROR"
 
 
+class _ScoredVectorStore(IVectorStore):
+    def __init__(self, score: float) -> None:
+        self._score = score
+
+    def query(self, tenant_id, query_text, top_k=5) -> list[tuple[str, float]]:
+        return [("We open Monday to Friday.", self._score)]
+
+
+class _ContextRecordingLLM(ILLMPort):
+    def __init__(self) -> None:
+        self.rag_context: str | None = "unset"
+
+    def generate(self, system_prompt, history, user_message, rag_context=None, max_tokens=500):
+        self.rag_context = rag_context
+        return "reply", 1
+
+
+class TestRagFallbackThreshold:
+    def _run(self, score: float, **executor_kwargs: Any) -> str | None:
+        llm = _ContextRecordingLLM()
+        executor = FlowExecutor(
+            flow_repo=FakeFlowRepo([]),
+            meta_send=RecordingMetaSendClient(),
+            vector_store=_ScoredVectorStore(score),
+            llm=llm,
+            conv_log_repo=FakeConvLogRepo(),
+            **executor_kwargs,
+        )
+        executor.execute(_message("what are your hours?"), _session())
+        return llm.rag_context
+
+    def test_score_above_default_gate_gives_context_to_the_llm(self) -> None:
+        assert self._run(0.85) == "We open Monday to Friday."
+
+    def test_score_below_default_gate_gives_no_context(self) -> None:
+        # unrelated questions score 0.67-0.79 with multilingual-e5-small
+        assert self._run(0.70) is None
+
+    def test_gate_is_configurable(self) -> None:
+        assert self._run(0.70, rag_min_score=0.60) == "We open Monday to Friday."
+        assert self._run(0.85, rag_min_score=0.90) is None
+
+
 class TestLLMFallback:
     def test_no_flow_match_calls_llm(self) -> None:
         llm = FakeLLMPort()

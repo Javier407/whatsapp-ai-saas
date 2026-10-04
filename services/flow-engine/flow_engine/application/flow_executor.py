@@ -13,6 +13,7 @@ from typing import Any, Literal
 from flow_engine.application.handoff import HANDOFF_ACK_MESSAGE, wants_human
 from flow_engine.application.node_executors import ExecutorDeps, NodeResult, execute_node
 from flow_engine.application.trigger_matcher import match_trigger
+from flow_engine.domain.embedding import DEFAULT_RAG_MIN_SCORE
 from flow_engine.domain.errors import MaxIterationsError, NodeExecutionError
 from flow_engine.domain.models import ConversationTurn, Flow, InboundMessage, Session
 from flow_engine.domain.ports import (
@@ -41,7 +42,9 @@ class FlowExecutor:
         llm: ILLMPort,
         conv_log_repo: IConvLogRepo,
         appointment_repo: IAppointmentRepo | None = None,
+        rag_min_score: float = DEFAULT_RAG_MIN_SCORE,
     ) -> None:
+        self._rag_min_score = rag_min_score
         self._flow_repo = flow_repo
         self._meta_send = meta_send
         self._vector_store = vector_store
@@ -198,10 +201,13 @@ class FlowExecutor:
         session.state = "LLM_FALLBACK"
         rag_context: str | None = None
         results = self._vector_store.query(message.tenant_id, message.text, top_k=5)
-        # 0.35: cosine similarity from MiniLM on multi-topic chunks rarely
-        # exceeds ~0.5 even for clear hits; gate only filters true noise.
+        # multilingual-e5 cosine scores are compressed into a high band: on the
+        # seed KB relevant questions scored 0.80-0.91 and unrelated ones 0.67-0.79,
+        # so the gate sits just below the relevant band (RAG_FALLBACK_MIN_SCORE).
+        # Leaning to recall: the system prompt already tells the LLM to say it has
+        # no information when the context does not cover the question.
         top_score = results[0][1] if results else 0.0
-        if results and top_score >= 0.35:
+        if results and top_score >= self._rag_min_score:
             rag_context = "\n\n".join(text for text, _ in results)
         logger.info(
             "RAG fallback retrieval",

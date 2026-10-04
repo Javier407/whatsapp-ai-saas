@@ -65,6 +65,24 @@ def test_openai_key_alone_does_not_satisfy_gemini(
     assert "GEMINI_API_KEY" in capsys.readouterr().err
 
 
+def test_embedding_model_and_rag_gate_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "g-key")
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("RAG_FALLBACK_MIN_SCORE", raising=False)
+    cfg = load_config()
+    assert cfg.embedding_model == "intfloat/multilingual-e5-small"
+    assert cfg.rag_min_score == 0.78
+
+
+def test_embedding_model_and_rag_gate_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "g-key")
+    monkeypatch.setenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    monkeypatch.setenv("RAG_FALLBACK_MIN_SCORE", "0.35")
+    cfg = load_config()
+    assert cfg.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
+    assert cfg.rag_min_score == 0.35
+
+
 def test_unknown_provider_is_fatal(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

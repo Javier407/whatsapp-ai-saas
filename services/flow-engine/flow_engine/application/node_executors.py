@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import httpx
 import jmespath
 
+from flow_engine.domain.embedding import DEFAULT_RAG_MIN_SCORE
 from flow_engine.domain.errors import NodeExecutionError
 from flow_engine.domain.models import FlowNode, Session
 from flow_engine.domain.ports import IAppointmentRepo, ILLMPort, IMetaSendPort, IVectorStore
@@ -259,7 +260,7 @@ def execute_rag_lookup(
         query = query_template
 
     top_k: int = min(int(config.get("top_k", 5)), 10)
-    min_confidence: float = float(config.get("min_confidence", 0.75))
+    min_confidence: float = float(config.get("min_confidence", DEFAULT_RAG_MIN_SCORE))
     store_in_slot: str = config.get("store_in_slot", "_rag_context")
 
     results = deps.vector_store.query(session.tenant_id, query, top_k=top_k)

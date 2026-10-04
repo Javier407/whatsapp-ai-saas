@@ -1,7 +1,8 @@
 """ChromaDB retriever: queries the per-tenant vector collection.
 
-Collection naming mirrors rag-indexer: ``tenant_{tenantId_no_hyphens}``.
-Embedder model: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions).
+Collection naming mirrors rag-indexer (``flow_engine.domain.embedding.collection_name``):
+one collection per tenant *and* embedding model. The embedder must expose
+``embed_query(text)`` and use the same model as the rag-indexer.
 """
 from __future__ import annotations
 
@@ -10,15 +11,23 @@ from typing import Any, cast
 
 import chromadb
 
+from flow_engine.domain.embedding import DEFAULT_EMBEDDING_MODEL, collection_name
 from flow_engine.domain.ports import IVectorStore
 
 logger = logging.getLogger(__name__)
 
 
 class ChromaRetriever(IVectorStore):
-    def __init__(self, host: str, port: int, embedder: Any) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        embedder: Any,
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    ) -> None:
         self._client = chromadb.HttpClient(host=host, port=port)
-        self._embedder = embedder  # same LocalEmbedder as rag-indexer
+        self._embedder = embedder
+        self._embedding_model = embedding_model
 
     def query(
         self,
@@ -31,18 +40,19 @@ class ChromaRetriever(IVectorStore):
         Similarity score is 1.0 - cosine_distance; higher is better.
         Returns [] if the collection doesn't exist yet (no KB indexed).
         """
-        collection_name = f"tenant_{tenant_id.replace('-', '')}"
+        name = collection_name(tenant_id, self._embedding_model)
         try:
-            collection = self._client.get_collection(collection_name)
+            collection = self._client.get_collection(name)
         except Exception:
-            # Collection doesn't exist for this tenant yet
+            # Collection doesn't exist for this tenant/model yet (no KB indexed,
+            # or documents still need `make reindex` after a model change)
             logger.debug(
                 "No ChromaDB collection for tenant",
-                extra={"tenant_id": tenant_id, "collection": collection_name},
+                extra={"tenant_id": tenant_id, "collection": name},
             )
             return []
 
-        query_embedding: list[float] = self._embedder.embed([query_text])[0]
+        query_embedding: list[float] = self._embedder.embed_query(query_text)
 
         try:
             # chromadb's stubs demand ndarray / IncludeEnum types; plain

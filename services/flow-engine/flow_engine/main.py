@@ -20,11 +20,11 @@ import threading
 
 import redis
 import uvicorn
-from sentence_transformers import SentenceTransformer
 
 from flow_engine.application.flow_executor import FlowExecutor
 from flow_engine.config import Config, load_config
 from flow_engine.infrastructure.chroma.chroma_retriever import ChromaRetriever
+from flow_engine.infrastructure.embedder import QueryEmbedder
 from flow_engine.infrastructure.llm.langchain_llm import LangChainLLMPort
 from flow_engine.infrastructure.meta.meta_send_client import MetaSendClient
 from flow_engine.infrastructure.postgres.postgres_appointment_repo import PostgresAppointmentRepo
@@ -82,14 +82,8 @@ def main() -> None:
 
     # Load embedding model before entering consumer loop
     logger.info("Loading embedding model")
-    _raw_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-    class _Embedder:
-        def embed(self, texts: list[str]) -> list[list[float]]:
-            return [v.tolist() for v in _raw_model.encode(texts, show_progress_bar=False)]
-
-    embedder = _Embedder()
-    logger.info("Embedding model ready")
+    embedder = QueryEmbedder(cfg.embedding_model)
+    logger.info("Embedding model ready", extra={"model": cfg.embedding_model})
 
     # Infrastructure adapters
     redis_client = redis.from_url(cfg.redis_url, decode_responses=False)
@@ -106,6 +100,7 @@ def main() -> None:
         host=cfg.chromadb_host,
         port=cfg.chromadb_port,
         embedder=embedder,
+        embedding_model=cfg.embedding_model,
     )
     llm = LangChainLLMPort(
         provider=cfg.llm_provider,
@@ -122,6 +117,7 @@ def main() -> None:
         llm=llm,
         conv_log_repo=conv_log_repo,
         appointment_repo=appointment_repo,
+        rag_min_score=cfg.rag_min_score,
     )
 
     consumer = FlowEngineConsumer(
