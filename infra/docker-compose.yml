@@ -111,7 +111,8 @@ services:
   # MinIO (S3-compatible object storage)
   # -------------------------------------------------------------------------
   minio:
-    image: minio/minio:latest
+    build: ./minio
+    image: whatsapp-ai-saas-minio:local
     restart: unless-stopped
     ports:
       - "127.0.0.1:9000:9000"   # S3 API (host-local only)
@@ -133,7 +134,7 @@ services:
   # MinIO bucket initializer (one-shot; exits after bucket creation)
   # -------------------------------------------------------------------------
   minio-init:
-    image: minio/mc:latest
+    image: whatsapp-ai-saas-minio:local
     depends_on:
       minio:
         condition: service_healthy
