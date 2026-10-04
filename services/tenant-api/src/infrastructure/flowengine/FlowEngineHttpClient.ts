@@ -9,7 +9,7 @@ export class FlowEngineHttpClient implements IFlowEngineClient {
   constructor(
     private readonly baseUrl: string,
     private readonly internalToken: string,
-    private readonly dryRunTimeoutMs: number = 10000,
+    private readonly dryRunTimeoutMs: number = 30000,
   ) {}
 
   async reloadTenantFlows(tenantId: string): Promise<void> {

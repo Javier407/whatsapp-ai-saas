@@ -44,7 +44,7 @@ const configSchema = z.object({
   KB_MAX_DOCUMENTS_PER_TENANT: z.coerce.number().int().positive().default(100),
 
   // Dry-run timeout
-  DRY_RUN_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  DRY_RUN_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
 });
 
 export type Config = z.infer<typeof configSchema>;
