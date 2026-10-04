@@ -254,6 +254,8 @@ services:
     build:
       context: ../services/flow-engine
       dockerfile: Dockerfile
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
     restart: unless-stopped
     # No host port binding: with deploy.replicas: 2 both instances would fight
     # for port 8001 on the host. Internal services reach flow-engine:8001 via
@@ -270,12 +272,12 @@ services:
       META_API_BASE: ${META_API_BASE:-https://graph.facebook.com/v21.0}
       META_APP_SECRET: ${META_APP_SECRET}
       MASTER_KEY: ${MASTER_KEY}
-      EMBEDDER_DEFAULT: ${EMBEDDER_DEFAULT:-sbert}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
       LLM_MODEL: ${LLM_MODEL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      RAG_DEFAULT_CONFIDENCE: ${RAG_DEFAULT_CONFIDENCE:-0.55}
+      RAG_FALLBACK_MIN_SCORE: ${RAG_FALLBACK_MIN_SCORE:-0.78}
       WORKER_COUNT: ${FLOW_ENGINE_WORKER_COUNT:-4}
       STREAM_BLOCK_MS: ${STREAM_BLOCK_MS:-5000}
       LOCK_TTL_SECONDS: ${LOCK_TTL_SECONDS:-30}
@@ -374,6 +376,8 @@ services:
     build:
       context: ../services/rag-indexer
       dockerfile: Dockerfile
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -386,7 +390,7 @@ services:
       S3_BUCKET_KB: ${S3_BUCKET_KB:-kb-documents}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      EMBEDDER_DEFAULT: ${EMBEDDER_DEFAULT:-sbert}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
       CHUNK_SIZE_TOKENS: ${CHUNK_SIZE_TOKENS:-512}
       CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-50}
       EMBED_BATCH_SIZE: ${EMBED_BATCH_SIZE:-32}

@@ -2,7 +2,7 @@ COMPOSE = docker compose -f infra/docker-compose.yml
 ENV_FILE = infra/.env
 ENV_EXAMPLE = infra/.env.example
 
-.PHONY: dev down migrate logs ps clean build infra-up app-up wait-infra seed test lint psql redis-cli e2e-up e2e-down test-webhook smoke test-isolation e2e
+.PHONY: dev down migrate logs ps clean build infra-up app-up wait-infra seed reindex test lint psql redis-cli e2e-up e2e-down test-webhook smoke test-isolation e2e
 
 ##
 ## Core targets
@@ -68,6 +68,9 @@ wait-infra: ## Wait until postgres and redis are healthy
 
 seed: ## Seed test tenant, flow, and knowledge base document
 	@bash infra/seed/seed.sh
+
+reindex: ## Re-embed all indexed documents after an EMBEDDING_MODEL change (ARGS="--dry-run --drop-legacy")
+	$(COMPOSE) run --rm --no-deps rag-indexer python -m rag_indexer.reindex $(ARGS)
 
 psql: ## Open an interactive psql session
 	$(COMPOSE) exec postgres psql -U app_user -d whatsapp_saas

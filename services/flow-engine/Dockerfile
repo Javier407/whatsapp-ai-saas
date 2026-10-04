@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- builder stage --------------------------------------------------------
-FROM base AS builder
+# ---- deps stage -----------------------------------------------------------
+FROM base AS deps
 
 RUN pip install --no-cache-dir uv
 
@@ -19,6 +19,24 @@ RUN uv pip install --system torch --index-url https://download.pytorch.org/whl/c
 # Dependencies in their own layer so source edits don't re-resolve them
 COPY pyproject.toml .
 RUN uv pip install --system -r pyproject.toml
+
+# ---- model stage ----------------------------------------------------------
+# Embedding model (~470 MB) downloaded at build time so containers start offline
+# and fast. Its own stage, derived from deps only, so source edits never trigger
+# the download again. EMBEDDING_MODEL must match the runtime value (compose passes both).
+FROM deps AS model
+ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
+ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
+    SENTENCE_TRANSFORMERS_HOME=/models/sentence_transformers \
+    HF_HOME=/models/huggingface
+# Retried: a dropped connection to the Hugging Face CDN otherwise fails the build.
+RUN for i in 1 2 3; do \
+      python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['EMBEDDING_MODEL'])" && exit 0; \
+      sleep 10; \
+    done; exit 1
+
+# ---- builder stage --------------------------------------------------------
+FROM deps AS builder
 
 # Project itself, non-editable; dev extras stay out of the runtime image
 COPY flow_engine/ ./flow_engine/
@@ -31,18 +49,19 @@ FROM base AS runtime
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Non-root user; must own the model cache so sentence-transformers can
-# download all-MiniLM-L6-v2 at first use
+# Non-root user; owns the model cache
 RUN useradd --create-home --shell /bin/bash appuser \
-    && mkdir -p /app/.cache/sentence_transformers \
-    && chown -R appuser:appuser /app/.cache
+    && mkdir -p /app/.cache \
+    && chown appuser:appuser /app/.cache
+COPY --from=model --chown=appuser:appuser /models/ /app/.cache/
 USER appuser
 
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# sentence-transformers model cache — mount a volume in production
-ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
+ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
+ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
+    HF_HOME=/app/.cache/huggingface \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # FastAPI admin API on 8001; consumer runs in a daemon thread
 EXPOSE 8001
